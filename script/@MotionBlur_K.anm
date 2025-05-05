@@ -1,0 +1,50 @@
+@ObjectMotionBlur
+--track0:sAngle,0,720,180
+--track1:sPhase,-360,360,-90
+--track2:smpLim,1,4096,256,1
+--track3:pvSmpLim,0,4096,0,1
+--check0:Mix Original Image,0
+--dialog:Use Geometry/chk,_1=0;*Clear Method,_2="1";Save All Geo/chk,_3=1;Keep Size/chk,_4=0;Calc -1F && -2F/chk,_5=1;Reload,_6=0;Print Info,_7=0;Shader Folder,_8="\\shaders";PI,_0=nil;
+
+local is_rikky_mod_loaded, R = pcall(require, "rikky_module")
+if is_rikky_mod_loaded then
+    local list = {"None", "Auto", "All Objects", "Current Object"}
+    R.list(2, list)
+    R.checkbox(6, 7)
+end
+
+_0 = _0 or {}
+local shutter_angle = tonumber(_0[1]) or obj.track0
+local shutter_phase = tonumber(_0[2]) or obj.track1
+local render_sample_limit = tonumber(_0[3]) or obj.track2
+local preview_sample_limit = tonumber(_0[4]) or obj.track3
+local is_orig_img_visible = obj.check0
+if type(_0[5]) == "boolean" then
+    is_orig_img_visible = _0[5]
+elseif type(_0[5]) == "number" then
+    is_orig_img_visible = _0[5] ~= 0
+end
+local is_using_geometry_enabled = (_1 or 0) ~= 0 _1 = nil
+local geometry_data_cleanup_method = tonumber(_2) or 1 _2 = nil
+local is_saving_all_geometry_enabled = (_3 or 1) ~= 0 _3 = nil
+local is_keeping_size_enabled = (_4 or 0) ~= 0 _4 = nil
+local is_calc_neg1f_and_neg2f_enabled = (_5 or 1) ~= 0 _5 = nil
+local is_reload_enabled = false
+if (type(_6) == "boolean") then
+    is_reload_enabled = _6
+elseif (type(_6) == "number") then
+    is_reload_enabled = _6 ~= 0
+end
+_6= nil
+local is_printing_info_enabled = false
+if (type(_7) == "boolean") then
+    is_printing_info_enabled = _7
+elseif (type(_7) == "number") then
+    is_printing_info_enabled = _7 ~= 0
+end
+_7 = nil
+local shader_folder = _8 or "\\shaders" _8 = nil
+_0 = nil
+
+local MotionBlur_K = require("MotionBlur_K")
+MotionBlur_K.process_object_motion_blur(shutter_angle, shutter_phase, render_sample_limit, preview_sample_limit, is_orig_img_visible, is_using_geometry_enabled, geometry_data_cleanup_method, is_saving_all_geometry_enabled, is_keeping_size_enabled, is_calc_neg1f_and_neg2f_enabled, is_reload_enabled, is_printing_info_enabled, shader_folder)

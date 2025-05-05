@@ -1,0 +1,94 @@
+name: releaser
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: "recursive"
+
+    - name: Setup MSVC (x86)
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x86
+
+    - name: Install Lua 5.1.5
+      uses: leafo/gh-actions-lua@v11
+      with:
+        luaVersion: 5.1.5
+
+    - name: Build
+      run: |
+        cd ${{ github.workspace }}
+        cmake -S dll_src -B dll_src/build -DCMAKE_GENERATOR_PLATFORM=Win32
+        cmake --build dll_src/build --config Release
+
+    - name: Create Zip
+      shell: pwsh
+      run: |
+        cd ${{ github.workspace }}
+        mkdir publish
+        cp dll_src/build/Release/*.dll publish
+        cp script/* publish
+        cp -r shaders publish
+        cp *.md publish
+        cp LICENSE publish
+        cd publish
+        7z a MotionBlur_K.zip *
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: publish
+        path: ${{ github.workspace }}/publish/MotionBlur_K.zip
+
+  releaser:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+    - name: Chekout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: publish
+        path: artifacts
+
+    - name: Create release note
+      run: |
+        count=0
+        IFS=$'\n'
+        while read line; do
+          if [ ${count} = 0 ] && [[ ${line} =~ "Change Log" ]]; then
+            count=1
+          elif [ ${count} = 1 ] && [[ ${line} =~ "*v" ]]; then
+            count=2
+          elif [ ${count} = 2 ] && [[ ${line} =~ "*v" ]]; then
+            break
+          elif [ ${count} = 2 ]; then
+            echo ${line} >> ReleaseNote.txt
+          fi
+        done < README.md
+
+    - name: Create release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: ${{ github.ref_name }}
+        files: '${{ github.workspace }}/artifacts/*.zip'
+        body_path: ReleaseNote.txt
