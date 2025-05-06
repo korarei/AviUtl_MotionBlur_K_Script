@@ -269,6 +269,10 @@ process_object_motion_blur(lua_State *L) {
         ObjectUtils obj_utils;
         ObjectMotionBlurParams params(L, obj_utils.get_is_saving());
         // Required components for saving geometry data.
+        if (params.is_using_geometry_enabled && obj_utils.get_obj_num() > 65536)
+            std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] There are too many individual objects."
+                      << RESET_COL << std::endl;
+
         int32_t shared_mem_key = make_shared_mem_key(0, obj_utils.get_object_id(), obj_utils.get_obj_index());
         int32_t shared_mem_base_key = make_shared_mem_key(0, obj_utils.get_object_id(), 0);
         Geometry geo_curr_f;

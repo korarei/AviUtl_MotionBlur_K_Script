@@ -110,8 +110,7 @@ void
 GLShaderKit::setFloat(std::string name, const std::vector<float> &vec) const {
     lua_getfield(L, -1, "setFloat");
     lua_pushstring(L, name.c_str());
-    for (float value : vec)
-        lua_pushnumber(L, value);
+    for (float value : vec) lua_pushnumber(L, value);
 
     lua_call(L, vec.size() + 1, 0);
 }
@@ -120,8 +119,7 @@ void
 GLShaderKit::setInt(std::string name, const std::vector<int> &vec) const {
     lua_getfield(L, -1, "setInt");
     lua_pushstring(L, name.c_str());
-    for (int value : vec)
-        lua_pushinteger(L, value);
+    for (int value : vec) lua_pushinteger(L, value);
 
     lua_call(L, vec.size() + 1, 0);
 }
@@ -171,7 +169,8 @@ GLShaderKit::setParamsForOMBStep(const std::string &name, const Steps &steps) co
     setMatrix(rot_param.c_str(), "2x2", false, steps.rz_rad);
 }
 
-void expand_image(const std::array<int, 4> &expansion, lua_State *L) {
+void
+expand_image(const std::array<int, 4> &expansion, lua_State *L) {
     lua_getglobal(L, "obj");
     lua_getfield(L, -1, "effect");
     lua_pushstring(L, "領域拡張");

@@ -116,7 +116,7 @@ handle_exists(int32_t key1) {
         return false;
 }
 
-void
+static void
 cleanup_all_handle() {
     for (auto &[_, inner_map] : g_handle_map) {
         for (auto &[__, handle] : inner_map) {

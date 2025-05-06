@@ -38,20 +38,31 @@ create_shared_mem(int32_t key1, int32_t key2, const T &val) {
     if (size == 0)
         return;
 
-    HANDLE handle = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, size, nullptr);
-    if (handle == nullptr)
-        return;
+    HANDLE old_handle = SharedMemoryInternal::get_shared_mem_handle(key1, key2);
+    HANDLE new_handle = nullptr;
 
-    T *ptr = static_cast<T *>(MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, size));
+    if (old_handle == nullptr) {
+        new_handle = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, size, nullptr);
+        if (new_handle == nullptr)
+            return;
+    } else {
+        new_handle = old_handle;
+    }
+
+    T *ptr = static_cast<T *>(MapViewOfFile(new_handle, FILE_MAP_ALL_ACCESS, 0, 0, size));
     if (ptr == nullptr) {
-        CloseHandle(handle);
+        if (new_handle != old_handle)
+            CloseHandle(new_handle);
         return;
     }
 
     std::memcpy(ptr, &val, size);
     UnmapViewOfFile(ptr);
 
-    SharedMemoryInternal::set_shared_mem_handle(key1, key2, handle);
+    if (new_handle != old_handle && old_handle != nullptr)
+        CloseHandle(old_handle);
+
+    SharedMemoryInternal::set_shared_mem_handle(key1, key2, new_handle);
 
     // Old Version.
     /*

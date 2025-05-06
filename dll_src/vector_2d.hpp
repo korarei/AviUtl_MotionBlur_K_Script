@@ -89,7 +89,7 @@ public:
     // To string.
     std::string to_string() const { return "Vec2(" + std::to_string(x) + ", " + std::to_string(y) + ")"; }
 
-    // cieling function
+    // Ceiling function.
     Vec2<T> ceil() const { return Vec2<T>(std::ceil(x), std::ceil(y)); }
 
 private:

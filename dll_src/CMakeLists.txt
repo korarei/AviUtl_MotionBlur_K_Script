@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20.0)
-project(MotionBlur_K VERSION 1.0 LANGUAGES CXX)
+project(MotionBlur_K VERSION 1.0.1 LANGUAGES CXX)
 
 
 # Path Settings.

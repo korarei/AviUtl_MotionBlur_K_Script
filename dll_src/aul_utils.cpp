@@ -58,11 +58,11 @@ ObjectUtils::ObjectUtils() :
     object_id(ExEdit::object(curr_proc_ofi)),
     curr_proc_filter_idx(ExEdit::filter(curr_proc_ofi)) {
     AviUtl::SysInfo sys_info;
-    efp->aviutl_exfunc->get_sys_info(static_cast<AviUtl::EditHandle *>(efpip->editp), &sys_info);
+    efp->aviutl_exfunc->get_sys_info(nullptr, &sys_info);
     max_w = sys_info.max_w;
     max_h = sys_info.max_h;
 
-    if (strncmp(sys_info.info, "1.10", 4) != 0) {
+    if (sys_info.build != 11003) {
         throw std::runtime_error("AviUtl v1.10 is required.");
     }
 }
