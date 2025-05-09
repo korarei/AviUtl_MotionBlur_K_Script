@@ -1,5 +1,10 @@
 # @MotionBlur_K
 
+![GitHub License](https://img.shields.io/github/license/korarei/AviUtl_MotionBlur_K_Script)
+![GitHub Last commit](https://img.shields.io/github/last-commit/korarei/AviUtl_MotionBlur_K_Script)
+![GitHub Downloads](https://img.shields.io/github/downloads/korarei/AviUtl_MotionBlur_K_Script/total)
+![GitHub Release](https://img.shields.io/github/v/release/korarei/AviUtl_MotionBlur_K_Script)
+
 モーションブラー系エフェクトを集めたスクリプトになる予定．
 
 現在使用可能なスクリプト
