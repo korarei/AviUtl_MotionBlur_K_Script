@@ -42,9 +42,8 @@ private:
     static constexpr uintptr_t EFPP_OFFSET = 0x1b2b10;
     static constexpr uintptr_t EFPIPP_OFFSET = 0x1b2b20;
     static constexpr uintptr_t GET_CURR_PROC_OFFSET = 0x047ba0;
-    static constexpr uintptr_t FUNC_0x047ad0_OFFSET = 0x047ad0;
     static constexpr uintptr_t LOADED_FILTER_TABLE_OFFSET = 0x187c98;
-    static constexpr uintptr_t CAMERA_MODE = 0x013596c;
+    static constexpr uintptr_t CAMERA_MODE_OFFSET = 0x013596c;
 
     uintptr_t get_exedit_base() const;
     bool check_exedit_version(uintptr_t exedit_base) const;
@@ -77,8 +76,8 @@ public:
     int32_t get_max_w() const;
     int32_t get_max_h() const;
 
-    int32_t &set_obj_w();
-    int32_t &set_obj_h();
+    void set_obj_w(int32_t w);
+    void set_obj_h(int32_t h);
     ExEdit::FilterProcInfo::Geometry &set_obj_data();
 
     template <typename T>
@@ -149,7 +148,7 @@ AulPtrs::get_loaded_filter_table(uintptr_t exedit_base) const {
 
 inline int32_t
 AulPtrs::get_camera_mode(uintptr_t exedit_base) const {
-    return *reinterpret_cast<int32_t *>(exedit_base + CAMERA_MODE);
+    return *reinterpret_cast<int32_t *>(exedit_base + CAMERA_MODE_OFFSET);
 }
 
 inline AulPtrs::GetCurrentProcessing
@@ -230,14 +229,20 @@ ObjectUtils::get_max_h() const {
 }
 
 // Object Utilities Setters.
-inline int32_t &
-ObjectUtils::set_obj_w() {
-    return efpip->obj_w;
+void
+ObjectUtils::set_obj_w(int32_t w) {
+    if (w < 0 || w > max_w)
+        throw std::out_of_range("Width is out of range.");
+
+    efpip->obj_w = w;
 }
 
-inline int32_t &
-ObjectUtils::set_obj_h() {
-    return efpip->obj_h;
+void
+ObjectUtils::set_obj_h(int32_t h) {
+    if (h < 0 || h > max_h)
+        throw std::out_of_range("Height is out of range.");
+
+    return efpip->obj_h = h;
 }
 
 inline ExEdit::FilterProcInfo::Geometry &
