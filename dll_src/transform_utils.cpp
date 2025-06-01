@@ -14,15 +14,15 @@ Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType o
                   ZOOM_MIN)),
     rz_deg(obj_utls.calc_trackbar_value_for_drawing_filter(TrackName::RotationZ, offset_frame, offset_type)),
     rz_rad(to_rad(rz_deg)),
-    cx(obj_utls.calc_cx()),
-    cy(obj_utls.calc_cy()) {}
+    cx(obj_utls.get_cx()),
+    cy(obj_utls.get_cy()) {}
 
 void
 Transform::apply_geometry(const Geometry &geo) {
-    x += static_cast<float>((static_cast<int64_t>(geo.ox) * 100) >> 12) * 1e-2f;
-    y += static_cast<float>((static_cast<int64_t>(geo.oy) * 100) >> 12) * 1e-2f;
-    zoom = std::max(zoom * static_cast<float>((static_cast<int64_t>(geo.zoom) * 1000) >> 16) * 1e-3f, ZOOM_MIN);
-    rz_deg = std::fmod(rz_deg, 360.0f) + static_cast<float>((static_cast<int64_t>(geo.rz) * 360 * 1000) >> 16) * 1e-3f;
+    x += ObjectUtils::calc_ox(geo.ox);
+    y += ObjectUtils::calc_oy(geo.oy);
+    zoom = std::max(zoom * ObjectUtils::calc_zoom(geo.zoom), ZOOM_MIN);
+    rz_deg = ObjectUtils::calc_rz(geo.rz, rz_deg);
     rz_rad = to_rad(rz_deg);
 }
 

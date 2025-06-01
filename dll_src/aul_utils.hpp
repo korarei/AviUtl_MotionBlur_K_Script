@@ -80,6 +80,21 @@ public:
     void set_obj_h(int32_t h);
     ExEdit::FilterProcInfo::Geometry &set_obj_data();
 
+    static constexpr ExEdit::ObjectFilterIndex create_object_filter_index(uint16_t object_index, uint16_t filter_index);
+    static constexpr float calc_ox(int32_t ox);
+    static constexpr float calc_oy(int32_t oy);
+    static constexpr float calc_zoom(int32_t zoom);
+    static float calc_rz(int32_t rz, float base_angle = 0.0f);
+
+    float get_cx(std::optional<int32_t> cx = std::nullopt, int32_t offset_frame = 0,
+                 OffsetType offset_type = OffsetType::Current) const;
+    float get_cy(std::optional<int32_t> cy = std::nullopt, int32_t offset_frame = 0,
+                 OffsetType offset_type = OffsetType::Current) const;
+    float get_rz(std::optional<int32_t> rz = std::nullopt, int32_t offset_frame = 0,
+                 OffsetType offset_type = OffsetType::Current) const;
+    float calc_trackbar_value_for_drawing_filter(TrackName track_name, int32_t offset_frame = 0,
+                                                 OffsetType offset_type = OffsetType::Current) const;
+
     template <typename T>
     bool create_shared_mem(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, const T &val) const {
         return create_shared_mem_impl(key1, key2, handle_ptr, sizeof(T), &val);
@@ -92,19 +107,6 @@ public:
 
     void delete_shared_mem(int32_t key1, AviUtl::SharedMemoryInfo *handle) const;
 
-    float calc_ox(std::optional<int32_t> ox = std::nullopt) const;
-    float calc_oy(std::optional<int32_t> oy = std::nullopt) const;
-    float calc_zoom(std::optional<int32_t> zoom = std::nullopt) const;
-    float calc_cx(std::optional<int32_t> cx = std::nullopt, int32_t offset_frame = 0,
-                  OffsetType offset_type = OffsetType::Current) const;
-    float calc_cy(std::optional<int32_t> cy = std::nullopt, int32_t offset_frame = 0,
-                  OffsetType offset_type = OffsetType::Current) const;
-    float calc_rz(std::optional<int32_t> rz = std::nullopt, int32_t offset_frame = 0,
-                  OffsetType offset_type = OffsetType::Current) const;
-    float calc_trackbar_value_for_drawing_filter(TrackName track_name, int32_t offset_frame = 0,
-                                                 OffsetType offset_type = OffsetType::Current) const;
-    static constexpr ExEdit::ObjectFilterIndex create_object_filter_index(uint16_t object_index, uint16_t filter_index);
-
 private:
     int32_t local_frame;
     bool is_saving;
@@ -114,8 +116,10 @@ private:
     int32_t max_w;
     int32_t max_h;
 
-    bool create_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, int32_t size, const void *val) const;
-    bool get_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo *handle, int32_t size, void *val) const;
+    bool create_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, int32_t size,
+                                const void *val) const;
+    bool get_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo *handle, int32_t size,
+                             void *val) const;
 };
 
 // Functions of AviUtl Pointers class.
@@ -229,7 +233,7 @@ ObjectUtils::get_max_h() const {
 }
 
 // Object Utilities Setters.
-void
+inline void
 ObjectUtils::set_obj_w(int32_t w) {
     if (w < 0 || w > max_w)
         throw std::out_of_range("Width is out of range.");
@@ -237,12 +241,12 @@ ObjectUtils::set_obj_w(int32_t w) {
     efpip->obj_w = w;
 }
 
-void
+inline void
 ObjectUtils::set_obj_h(int32_t h) {
     if (h < 0 || h > max_h)
         throw std::out_of_range("Height is out of range.");
 
-    return efpip->obj_h = h;
+    efpip->obj_h = h;
 }
 
 inline ExEdit::FilterProcInfo::Geometry &
@@ -253,37 +257,42 @@ ObjectUtils::set_obj_data() {
 // calculate the geometry.
 // This fixed-point precision provides one more decimal digit than the trackbar,
 // ensuring accurate internal computation before mapping to UI resolution.
-inline float
-ObjectUtils::calc_ox(std::optional<int32_t> ox) const {
-    return static_cast<float>((static_cast<int64_t>(ox.value_or(efpip->obj_data.ox)) * 100) >> 12) * 1e-2f;
+inline constexpr float
+ObjectUtils::calc_ox(int32_t ox) {
+    return static_cast<float>((static_cast<int64_t>(ox) * 100) >> 12) * 1e-2f;
+}
+
+inline constexpr float
+ObjectUtils::calc_oy(int32_t oy) {
+    return static_cast<float>((static_cast<int64_t>(oy) * 100) >> 12) * 1e-2f;
+}
+
+inline constexpr float
+ObjectUtils::calc_zoom(int32_t zoom) {
+    return static_cast<float>((static_cast<int64_t>(zoom) * 1000) >> 16) * 1e-3f;
 }
 
 inline float
-ObjectUtils::calc_oy(std::optional<int32_t> oy) const {
-    return static_cast<float>((static_cast<int64_t>(oy.value_or(efpip->obj_data.oy)) * 100) >> 12) * 1e-2f;
+ObjectUtils::calc_rz(int32_t rz, float base_angle) {
+    return std::fmod(base_angle, 360.0f) + static_cast<float>((static_cast<int64_t>(rz) * 360 * 1000) >> 16) * 1e-3f;
 }
 
 inline float
-ObjectUtils::calc_zoom(std::optional<int32_t> zoom) const {
-    return static_cast<float>((static_cast<int64_t>(zoom.value_or(efpip->obj_data.zoom)) * 1000) >> 16) * 1e-3f;
-}
-
-inline float
-ObjectUtils::calc_cx(std::optional<int32_t> cx, int32_t offset_frame, OffsetType offset_type) const {
+ObjectUtils::get_cx(std::optional<int32_t> cx, int32_t offset_frame, OffsetType offset_type) const {
     return calc_trackbar_value_for_drawing_filter(TrackName::CenterX, offset_frame, offset_type)
-         + static_cast<float>((static_cast<int64_t>(cx.value_or(efpip->obj_data.cx)) * 100) >> 12) * 1e-2f;
+         + calc_ox(cx.value_or(efpip->obj_data.cx));
 }
 
 inline float
-ObjectUtils::calc_cy(std::optional<int32_t> cy, int32_t offset_frame, OffsetType offset_type) const {
+ObjectUtils::get_cy(std::optional<int32_t> cy, int32_t offset_frame, OffsetType offset_type) const {
     return calc_trackbar_value_for_drawing_filter(TrackName::CenterY, offset_frame, offset_type)
-         + static_cast<float>((static_cast<int64_t>(cy.value_or(efpip->obj_data.cy)) * 100) >> 12) * 1e-2f;
+         + calc_oy(cy.value_or(efpip->obj_data.cy));
 }
 
 inline float
-ObjectUtils::calc_rz(std::optional<int32_t> rz, int32_t offset_frame, OffsetType offset_type) const {
-    return std::fmod(calc_trackbar_value_for_drawing_filter(TrackName::RotationZ, offset_frame, offset_type), 360.0f)
-         + static_cast<float>((static_cast<int64_t>(rz.value_or(efpip->obj_data.rz)) * 360 * 1000) >> 16) * 1e-3f;
+ObjectUtils::get_rz(std::optional<int32_t> rz, int32_t offset_frame, OffsetType offset_type) const {
+    float base_angle = calc_trackbar_value_for_drawing_filter(TrackName::RotationZ, offset_frame, offset_type);
+    return calc_rz(rz.value_or(efpip->obj_data.rz), base_angle);
 }
 
 // Create an object filter index from object index and filter index.
