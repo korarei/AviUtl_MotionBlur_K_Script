@@ -84,6 +84,8 @@ public:
     static constexpr float calc_ox(int32_t ox);
     static constexpr float calc_oy(int32_t oy);
     static constexpr float calc_zoom(int32_t zoom);
+    static constexpr float calc_cx(int32_t cx, float base_cx = 0.0f);
+    static constexpr float calc_cy(int32_t cy, float base_cy = 0.0f);
     static float calc_rz(int32_t rz, float base_angle = 0.0f);
 
     float get_cx(std::optional<int32_t> cx = std::nullopt, int32_t offset_frame = 0,
@@ -157,8 +159,7 @@ AulPtrs::get_camera_mode(uintptr_t exedit_base) const {
 
 inline AulPtrs::GetCurrentProcessing
 AulPtrs::get_get_curr_proc(uintptr_t exedit_base) const {
-    GetCurrentProcessing func = reinterpret_cast<GetCurrentProcessing>(exedit_base + GET_CURR_PROC_OFFSET);
-    return func;
+    return reinterpret_cast<GetCurrentProcessing>(exedit_base + GET_CURR_PROC_OFFSET);
 }
 
 // Object Utilities Gettrers.
@@ -272,6 +273,16 @@ ObjectUtils::calc_zoom(int32_t zoom) {
     return static_cast<float>((static_cast<int64_t>(zoom) * 1000) >> 16) * 1e-3f;
 }
 
+inline constexpr float
+ObjectUtils::calc_cx(int32_t cx, float base_cx) {
+    return base_cx + calc_oy(cx);
+}
+
+inline constexpr float
+ObjectUtils::calc_cy(int32_t cy, float base_cy) {
+    return base_cy + calc_oy(cy);
+}
+
 inline float
 ObjectUtils::calc_rz(int32_t rz, float base_angle) {
     return std::fmod(base_angle, 360.0f) + static_cast<float>((static_cast<int64_t>(rz) * 360 * 1000) >> 16) * 1e-3f;
@@ -279,14 +290,14 @@ ObjectUtils::calc_rz(int32_t rz, float base_angle) {
 
 inline float
 ObjectUtils::get_cx(std::optional<int32_t> cx, int32_t offset_frame, OffsetType offset_type) const {
-    return calc_trackbar_value_for_drawing_filter(TrackName::CenterX, offset_frame, offset_type)
-         + calc_ox(cx.value_or(efpip->obj_data.cx));
+    float base_cx = calc_trackbar_value_for_drawing_filter(TrackName::CenterX, offset_frame, offset_type);
+    return calc_cx(cx.value_or(efpip->obj_data.cx), base_cx);
 }
 
 inline float
 ObjectUtils::get_cy(std::optional<int32_t> cy, int32_t offset_frame, OffsetType offset_type) const {
-    return calc_trackbar_value_for_drawing_filter(TrackName::CenterY, offset_frame, offset_type)
-         + calc_oy(cy.value_or(efpip->obj_data.cy));
+    float base_cy = calc_trackbar_value_for_drawing_filter(TrackName::CenterY, offset_frame, offset_type);
+    return calc_cy(cy.value_or(efpip->obj_data.cy), base_cy);
 }
 
 inline float
