@@ -318,7 +318,7 @@ process_object_motion_blur(lua_State *L) {
         SegmentData<int> required_samples_data, samples_data;
         SegmentData<Steps> steps_data;
         Vec2<int> image_size(obj_utils.get_obj_w(), obj_utils.get_obj_h());
-        Vec2<float> center(obj_utils.calc_cx(), obj_utils.calc_cy());
+        Vec2<float> center(obj_utils.get_cx(), obj_utils.get_cy());
 
         if (params.is_calc_neg1f_and_neg2f_enabled
             && (obj_utils.get_local_frame() == 0 || obj_utils.get_local_frame() == 1)) {
