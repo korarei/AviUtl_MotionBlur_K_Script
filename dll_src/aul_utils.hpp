@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <algorithm>
 
 #define NOMINMAX
 #include <exedit.hpp>
@@ -236,18 +237,12 @@ ObjectUtils::get_max_h() const {
 // Object Utilities Setters.
 inline void
 ObjectUtils::set_obj_w(int32_t w) {
-    if (w < 0 || w > max_w)
-        throw std::out_of_range("Width is out of range.");
-
-    efpip->obj_w = w;
+    efpip->obj_w = std::clamp(w, 0, max_w);
 }
 
 inline void
 ObjectUtils::set_obj_h(int32_t h) {
-    if (h < 0 || h > max_h)
-        throw std::out_of_range("Height is out of range.");
-
-    efpip->obj_h = h;
+    efpip->obj_h = std::clamp(h, 0, max_h);
 }
 
 inline ExEdit::FilterProcInfo::Geometry &
