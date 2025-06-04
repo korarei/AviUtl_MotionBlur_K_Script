@@ -242,14 +242,14 @@ cleanup_geometry_data(bool is_enabled, int method, int32_t base_key, const Objec
             case 2:
                 if (obj_utils.get_frame_num() == obj_utils.get_frame_end()
                     && obj_utils.get_obj_index() == obj_utils.get_obj_num() - 1)
-                    cleanup_for_id(0, obj_utils.get_object_id());
+                    cleanup_for_id(0, obj_utils.get_curr_object_idx());
 
                 break;
             case 3:
                 cleanup_all(0);
                 break;
             case 4:
-                cleanup_for_id(0, obj_utils.get_object_id());
+                cleanup_for_id(0, obj_utils.get_curr_object_idx());
                 break;
             default:
                 uint16_t id = static_cast<uint16_t>(std::clamp(std::abs(static_cast<int64_t>(method)), 0i64, 65535i64));
@@ -257,7 +257,7 @@ cleanup_geometry_data(bool is_enabled, int method, int32_t base_key, const Objec
                 break;
         }
     } else if (handle_exists(base_key)) {
-        cleanup_for_id(0, obj_utils.get_object_id());
+        cleanup_for_id(0, obj_utils.get_curr_object_idx());
     }
 }
 
@@ -273,8 +273,8 @@ process_object_motion_blur(lua_State *L) {
             std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] There are too many individual objects."
                       << RESET_COL << std::endl;
 
-        int32_t shared_mem_key = make_shared_mem_key(0, obj_utils.get_object_id(), obj_utils.get_obj_index());
-        int32_t shared_mem_base_key = make_shared_mem_key(0, obj_utils.get_object_id(), 0);
+        int32_t shared_mem_key = make_shared_mem_key(0, obj_utils.get_curr_object_idx(), obj_utils.get_obj_index());
+        int32_t shared_mem_base_key = make_shared_mem_key(0, obj_utils.get_curr_object_idx(), 0);
         Geometry geo_curr_f;
         int shared_mem_curr_f = params.is_saving_all_geometry_enabled ? obj_utils.get_local_frame() : 0;
 
@@ -292,7 +292,7 @@ process_object_motion_blur(lua_State *L) {
         if (are_equal(params.shutter_angle, 0.0f))
             return 0;
 
-        if (are_equal(obj_utils.calc_trackbar_value_for_drawing_filter(TrackName::Zoom), 0.0f)) {
+        if (are_equal(obj_utils.calc_track_val(TrackName::Zoom), 0.0f)) {
             // Save geometry data.
             // This section is executed only when "saving all geometry" is disabled.
             if (params.is_using_geometry_enabled && !params.is_saving_all_geometry_enabled
@@ -464,7 +464,7 @@ process_object_motion_blur(lua_State *L) {
                     cleanup_method_str = "Custom ID";
                     break;
             }
-            std::cout << "[ObjectMotionBlur][INFO]\nObject ID: " << obj_utils.get_object_id()
+            std::cout << "[ObjectMotionBlur][INFO]\nObject ID: " << obj_utils.get_curr_object_idx()
                       << "\nIndex: " << obj_utils.get_obj_index()
                       << "\nRequired Samples: " << total_required_samples + 1
                       << "\nGeo Clear Method: " << cleanup_method_str << std::endl;

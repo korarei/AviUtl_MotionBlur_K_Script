@@ -1,9 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <optional>
-#include <algorithm>
 
 #define NOMINMAX
 #include <exedit.hpp>
@@ -70,7 +70,7 @@ public:
     int32_t get_obj_h() const;
     const ExEdit::FilterProcInfo::Geometry &get_obj_data() const;
     bool get_is_saving() const;
-    uint16_t get_object_id() const;
+    uint16_t get_curr_object_idx() const;
     int32_t get_obj_index() const;
     int32_t get_obj_num() const;
     int32_t get_camera_mode() const;
@@ -95,8 +95,8 @@ public:
                  OffsetType offset_type = OffsetType::Current) const;
     float get_rz(std::optional<int32_t> rz = std::nullopt, int32_t offset_frame = 0,
                  OffsetType offset_type = OffsetType::Current) const;
-    float calc_trackbar_value_for_drawing_filter(TrackName track_name, int32_t offset_frame = 0,
-                                                 OffsetType offset_type = OffsetType::Current) const;
+    float calc_track_val(TrackName track_name, int32_t offset_frame = 0,
+                         OffsetType offset_type = OffsetType::Current) const;
 
     template <typename T>
     bool create_shared_mem(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, const T &val) const {
@@ -113,9 +113,9 @@ public:
 private:
     int32_t local_frame;
     bool is_saving;
-    ExEdit::ObjectFilterIndex curr_proc_ofi;
-    uint16_t object_id;
-    uint16_t curr_proc_filter_idx;
+    ExEdit::ObjectFilterIndex curr_ofi;
+    uint16_t curr_object_idx;
+    uint16_t curr_filter_idx;
     int32_t max_w;
     int32_t max_h;
 
@@ -205,8 +205,8 @@ ObjectUtils::get_is_saving() const {
 }
 
 inline uint16_t
-ObjectUtils::get_object_id() const {
-    return object_id;
+ObjectUtils::get_curr_object_idx() const {
+    return curr_object_idx;
 }
 
 inline int32_t
@@ -285,19 +285,19 @@ ObjectUtils::calc_rz(int32_t rz, float base_angle) {
 
 inline float
 ObjectUtils::get_cx(std::optional<int32_t> cx, int32_t offset_frame, OffsetType offset_type) const {
-    float base_cx = calc_trackbar_value_for_drawing_filter(TrackName::CenterX, offset_frame, offset_type);
+    float base_cx = calc_track_val(TrackName::CenterX, offset_frame, offset_type);
     return calc_cx(cx.value_or(efpip->obj_data.cx), base_cx);
 }
 
 inline float
 ObjectUtils::get_cy(std::optional<int32_t> cy, int32_t offset_frame, OffsetType offset_type) const {
-    float base_cy = calc_trackbar_value_for_drawing_filter(TrackName::CenterY, offset_frame, offset_type);
+    float base_cy = calc_track_val(TrackName::CenterY, offset_frame, offset_type);
     return calc_cy(cy.value_or(efpip->obj_data.cy), base_cy);
 }
 
 inline float
 ObjectUtils::get_rz(std::optional<int32_t> rz, int32_t offset_frame, OffsetType offset_type) const {
-    float base_angle = calc_trackbar_value_for_drawing_filter(TrackName::RotationZ, offset_frame, offset_type);
+    float base_angle = calc_track_val(TrackName::RotationZ, offset_frame, offset_type);
     return calc_rz(rz.value_or(efpip->obj_data.rz), base_angle);
 }
 
