@@ -134,7 +134,7 @@ calc_corners(const Vec2<float> &base, const Vec2<float> &disp, const Vec2<float>
 static void
 resize_image(const Vec2<int> &img_size, const Vec2<float> &center, const SegmentData<Displacements> &disp,
              const SegmentData<float> &blur, const Steps &offset, float scale_factor_seg1, const Vec2<int> &max_size,
-             lua_State *L) {
+             lua_State *L, ObjectUtils &obj_utils) {
     if (!disp.seg1 || !blur.seg1) {
         return;
     }
@@ -182,7 +182,22 @@ resize_image(const Vec2<int> &img_size, const Vec2<float> &center, const Segment
                   << std::endl;
     }
 
-    expand_image(expansion, L);
+    // expand_image(expansion, L);
+    obj_utils.expand_image(expansion);
+    lua_getglobal(L, "obj");
+    lua_getfield(L, -1, "cx");
+    float cx = static_cast<float>(lua_tonumber(L, -1));
+    lua_pop(L, 1);
+    lua_pushnumber(L, cx + static_cast<float>(expansion[2] - expansion[3]) * 0.5f);
+    lua_setfield(L, -2, "cx");
+
+    lua_getfield(L, -1, "cy");
+    float cy = static_cast<float>(lua_tonumber(L, -1));
+    lua_pop(L, 1);
+    lua_pushnumber(L, cy + static_cast<float>(expansion[0] - expansion[1]) * 0.5f);
+    lua_setfield(L, -2, "cy");
+
+    lua_pop(L, 1);
 }
 
 // Rendering.
@@ -242,14 +257,14 @@ cleanup_geometry_data(bool is_enabled, int method, int32_t base_key, const Objec
             case 2:
                 if (obj_utils.get_frame_num() == obj_utils.get_frame_end()
                     && obj_utils.get_obj_index() == obj_utils.get_obj_num() - 1)
-                    cleanup_for_id(0, obj_utils.get_object_id());
+                    cleanup_for_id(0, obj_utils.get_curr_object_idx());
 
                 break;
             case 3:
                 cleanup_all(0);
                 break;
             case 4:
-                cleanup_for_id(0, obj_utils.get_object_id());
+                cleanup_for_id(0, obj_utils.get_curr_object_idx());
                 break;
             default:
                 uint16_t id = static_cast<uint16_t>(std::clamp(std::abs(static_cast<int64_t>(method)), 0i64, 65535i64));
@@ -257,7 +272,7 @@ cleanup_geometry_data(bool is_enabled, int method, int32_t base_key, const Objec
                 break;
         }
     } else if (handle_exists(base_key)) {
-        cleanup_for_id(0, obj_utils.get_object_id());
+        cleanup_for_id(0, obj_utils.get_curr_object_idx());
     }
 }
 
@@ -273,8 +288,8 @@ process_object_motion_blur(lua_State *L) {
             std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] There are too many individual objects."
                       << RESET_COL << std::endl;
 
-        int32_t shared_mem_key = make_shared_mem_key(0, obj_utils.get_object_id(), obj_utils.get_obj_index());
-        int32_t shared_mem_base_key = make_shared_mem_key(0, obj_utils.get_object_id(), 0);
+        int32_t shared_mem_key = make_shared_mem_key(0, obj_utils.get_curr_object_idx(), obj_utils.get_obj_index());
+        int32_t shared_mem_base_key = make_shared_mem_key(0, obj_utils.get_curr_object_idx(), 0);
         Geometry geo_curr_f;
         int shared_mem_curr_f = params.is_saving_all_geometry_enabled ? obj_utils.get_local_frame() : 0;
 
@@ -292,7 +307,7 @@ process_object_motion_blur(lua_State *L) {
         if (are_equal(params.shutter_angle, 0.0f))
             return 0;
 
-        if (are_equal(obj_utils.calc_trackbar_value_for_drawing_filter(TrackName::Zoom), 0.0f)) {
+        if (are_equal(obj_utils.calc_track_val(TrackName::Zoom), 0.0f)) {
             // Save geometry data.
             // This section is executed only when "saving all geometry" is disabled.
             if (params.is_using_geometry_enabled && !params.is_saving_all_geometry_enabled
@@ -439,7 +454,7 @@ process_object_motion_blur(lua_State *L) {
         // Resize.
         if (!params.is_keeping_size_enabled)
             resize_image(image_size, center, disp_data, blur_amount_data, *steps_data.offset, scale_factor_seg1,
-                         Vec2<int>(obj_utils.get_max_w(), obj_utils.get_max_h()), L);
+                         Vec2<int>(obj_utils.get_max_w(), obj_utils.get_max_h()), L, obj_utils);
 
         // Rendering.
         render_object_motion_blur(L, params, steps_data, samples_data);
@@ -464,7 +479,7 @@ process_object_motion_blur(lua_State *L) {
                     cleanup_method_str = "Custom ID";
                     break;
             }
-            std::cout << "[ObjectMotionBlur][INFO]\nObject ID: " << obj_utils.get_object_id()
+            std::cout << "[ObjectMotionBlur][INFO]\nObject ID: " << obj_utils.get_curr_object_idx()
                       << "\nIndex: " << obj_utils.get_obj_index()
                       << "\nRequired Samples: " << total_required_samples + 1
                       << "\nGeo Clear Method: " << cleanup_method_str << std::endl;

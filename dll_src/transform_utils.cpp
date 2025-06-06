@@ -8,11 +8,10 @@ Transform::Transform(float x, float y, float zoom, float rz_deg, float cx, float
     x(x), y(y), zoom(std::max(zoom, ZOOM_MIN)), rz_deg(rz_deg), rz_rad(to_rad(rz_deg)), cx(cx), cy(cy) {}
 
 Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType offset_type) :
-    x(obj_utls.calc_trackbar_value_for_drawing_filter(TrackName::X, offset_frame, offset_type)),
-    y(obj_utls.calc_trackbar_value_for_drawing_filter(TrackName::Y, offset_frame, offset_type)),
-    zoom(std::max(obj_utls.calc_trackbar_value_for_drawing_filter(TrackName::Zoom, offset_frame, offset_type),
-                  ZOOM_MIN)),
-    rz_deg(obj_utls.calc_trackbar_value_for_drawing_filter(TrackName::RotationZ, offset_frame, offset_type)),
+    x(obj_utls.calc_track_val(TrackName::X, offset_frame, offset_type)),
+    y(obj_utls.calc_track_val(TrackName::Y, offset_frame, offset_type)),
+    zoom(std::max(obj_utls.calc_track_val(TrackName::Zoom, offset_frame, offset_type), ZOOM_MIN)),
+    rz_deg(obj_utls.calc_track_val(TrackName::RotationZ, offset_frame, offset_type)),
     rz_rad(to_rad(rz_deg)),
     cx(obj_utls.get_cx()),
     cy(obj_utls.get_cy()) {}
