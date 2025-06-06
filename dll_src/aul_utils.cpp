@@ -1,7 +1,10 @@
 #include <cstring>
+#include <ranges>
 #include <stdexcept>
 #define NOMINMAX
 #include <Windows.h>
+#include <bitset>
+#include <iostream>
 
 #include "aul_utils.hpp"
 
@@ -107,10 +110,6 @@ ObjectUtils::delete_shared_mem(int32_t key1, AviUtl::SharedMemoryInfo *handle) c
 
 float
 ObjectUtils::calc_track_val(TrackName track_name, int32_t offset_frame, OffsetType offset_type) const {
-    if (!efp)
-        throw std::runtime_error("ExEdit filter pointer is null.");
-    if (!efpip)
-        throw std::runtime_error("ExEdit filter Proc Info pointer is null.");
     if (!ExEdit::is_valid(curr_ofi))
         return 0.0f;
 
@@ -164,4 +163,47 @@ ObjectUtils::calc_track_val(TrackName track_name, int32_t offset_frame, OffsetTy
     } else {
         return 0.0f;
     }
+}
+
+void
+ObjectUtils::expand_image(const std::array<int32_t, 4> &expansion) {
+    constexpr int32_t fill_flag = 2;              // has_alpha
+    constexpr int32_t buf_cpy_flag = 0x13000003;  // Base (0x13000000) | dst_has_alpha (2) | src_has_alpha (1)
+
+    constexpr auto has_neg = [](const std::array<int32_t, 4> &vals) -> bool {
+        return std::ranges::any_of(vals, [](int32_t x) { return x < 0; });
+    };
+
+    if (has_neg(expansion))
+        return;
+
+    auto [top, bottom, left, right] = expansion;
+    int32_t w = efpip->obj_w;
+    int32_t h = efpip->obj_h;
+    set_obj_w(efpip->obj_w + right + left);
+    set_obj_h(efpip->obj_h + top + bottom);
+
+    if (left == 0 && right == 0) {
+        if (top > 0)
+            efp->exfunc->fill(efpip->obj_temp, 0, 0, w, top, 0, 0, 0, 0, fill_flag);
+
+        if (bottom > 0)
+            efp->exfunc->fill(efpip->obj_temp, 0, efpip->obj_h - bottom, w, bottom, 0, 0, 0, 0, fill_flag);
+    } else if (top == 0 && bottom == 0) {
+        if (left > 0)
+            efp->exfunc->fill(efpip->obj_temp, 0, 0, left, h, 0, 0, 0, 0, fill_flag);
+
+        if (right > 0)
+            efp->exfunc->fill(efpip->obj_temp, efpip->obj_w - right, 0, right, h, 0, 0, 0, 0, fill_flag);
+    } else {
+        efp->exfunc->fill(efpip->obj_temp, 0, 0, efpip->obj_w, efpip->obj_h, 0, 0, 0, 0, fill_flag);
+    }
+
+    efp->exfunc->bufcpy(efpip->obj_temp, left, top, efpip->obj_edit, 0, 0, w, h, 0, buf_cpy_flag);
+
+    std::swap(efpip->obj_edit, efpip->obj_temp);
+
+    // Investigating the cause of malfunction.
+    //efpip->obj_data.cx += (left - right) << 11;
+    //efpip->obj_data.cy += (top - bottom) << 11;
 }

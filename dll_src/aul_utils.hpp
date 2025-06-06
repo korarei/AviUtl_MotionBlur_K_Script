@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <optional>
@@ -97,6 +98,7 @@ public:
                  OffsetType offset_type = OffsetType::Current) const;
     float calc_track_val(TrackName track_name, int32_t offset_frame = 0,
                          OffsetType offset_type = OffsetType::Current) const;
+    void expand_image(const std::array<int32_t, 4> &expansion);
 
     template <typename T>
     bool create_shared_mem(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, const T &val) const {
