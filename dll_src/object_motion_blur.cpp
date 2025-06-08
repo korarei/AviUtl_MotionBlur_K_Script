@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -44,21 +45,29 @@ static const std::string dll_path = get_self_path();
 static const std::string shader_path = dll_path.empty() ? "C:" : dll_path.substr(0, dll_path.find_last_of("\\/"));
 
 // The object index is a uint16_t, but the maximum value is probably 15000, so 14 bits (max 16383) should be sufficient.
-// I don't think there are more than 65,536 individual objects.
+// I don't think there are more than 262,144 individual objects.
 inline static constexpr int32_t
-make_shared_mem_key(uint16_t scr_id, uint16_t obj_id, int32_t obj_index) {
-    uint32_t id_t = (static_cast<uint32_t>(scr_id & 0x3) << 30);
-    uint32_t id_m = (static_cast<uint32_t>(obj_index & 0xFFFF) << 14);
-    uint32_t id_b = static_cast<uint32_t>(obj_id & 0x3FFF);
-    uint32_t id = id_t | id_m | id_b;
+make_shared_mem_key(uint16_t obj_idx, int32_t obj_index) {
+    uint32_t id_t = (static_cast<uint32_t>(obj_index & 0x3FFFF) << 14);
+    uint32_t id_b = static_cast<uint32_t>(obj_idx & 0x3FFF);
+    uint32_t id = id_t | id_b;
     return static_cast<int32_t>(id);
+}
+
+// Get shared memory class.
+std::unique_ptr<SharedMemory> &
+get_shared_mem() {
+    static std::unique_ptr<SharedMemory> shared_mem = std::make_unique<SharedMemory>();
+    return shared_mem;
 }
 
 // Apply geometry to the transform.
 inline static void
 apply_geometry(Transform &transform, int32_t frame, int32_t shared_mem_key, const Geometry &default_geo) {
     Geometry geo;
-    if (get_shared_mem(shared_mem_key, frame, geo)) {
+    auto &shared_mem = get_shared_mem();
+
+    if (shared_mem->read(shared_mem_key, frame, geo)) {
         transform.apply_geometry(geo);
     } else {
         transform.apply_geometry(default_geo);
@@ -224,17 +233,21 @@ render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, co
 static void
 save_minimal_geometry(int32_t shared_mem_key, const Geometry &default_geo) {
     Geometry geo_prev_1f;
-    if (get_shared_mem(shared_mem_key, -1, geo_prev_1f))
-        create_shared_mem(shared_mem_key, -2, geo_prev_1f);
-    else
-        create_shared_mem(shared_mem_key, -2, default_geo);
+    auto &shared_mem = get_shared_mem();
 
-    create_shared_mem(shared_mem_key, -1, default_geo);
+    if (shared_mem->read(shared_mem_key, -1, geo_prev_1f))
+        shared_mem->write(shared_mem_key, -2, geo_prev_1f);
+    else
+        shared_mem->write(shared_mem_key, -2, default_geo);
+
+    shared_mem->write(shared_mem_key, -1, default_geo);
 }
 
 // Clear handle.
 static void
 cleanup_geometry_data(bool is_enabled, int method, int32_t base_key, const ObjectUtils &obj_utils) {
+    auto &shared_mem = get_shared_mem();
+
     if (is_enabled) {
         switch (method) {
             case 1:
@@ -242,22 +255,22 @@ cleanup_geometry_data(bool is_enabled, int method, int32_t base_key, const Objec
             case 2:
                 if (obj_utils.get_frame_num() == obj_utils.get_frame_end()
                     && obj_utils.get_obj_index() == obj_utils.get_obj_num() - 1)
-                    cleanup_for_id(0, obj_utils.get_curr_object_idx());
+                    shared_mem->cleanup_for_id(obj_utils.get_curr_object_idx());
 
                 break;
             case 3:
-                cleanup_all(0);
+                shared_mem->cleanup_all_handle();
                 break;
             case 4:
-                cleanup_for_id(0, obj_utils.get_curr_object_idx());
+                shared_mem->cleanup_for_id(obj_utils.get_curr_object_idx());
                 break;
             default:
                 uint16_t id = static_cast<uint16_t>(std::clamp(std::abs(static_cast<int64_t>(method)), 0i64, 65535i64));
-                cleanup_for_id(0, id);
+                shared_mem->cleanup_for_id(id);
                 break;
         }
-    } else if (handle_exists(base_key)) {
-        cleanup_for_id(0, obj_utils.get_curr_object_idx());
+    } else if (shared_mem->handle_exists(base_key)) {
+        shared_mem->cleanup_for_id(obj_utils.get_curr_object_idx());
     }
 }
 
@@ -266,15 +279,16 @@ int
 process_object_motion_blur(lua_State *L) {
     try {
         // Create instances.
+        auto &shared_mem = get_shared_mem();
         ObjectUtils obj_utils;
         ObjectMotionBlurParams params(L, obj_utils.get_is_saving());
         // Required components for saving geometry data.
-        if (params.is_using_geometry_enabled && obj_utils.get_obj_num() > 65536)
+        if (params.is_using_geometry_enabled && obj_utils.get_obj_num() > 262144)
             std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] There are too many individual objects."
                       << RESET_COL << std::endl;
 
-        int32_t shared_mem_key = make_shared_mem_key(0, obj_utils.get_curr_object_idx(), obj_utils.get_obj_index());
-        int32_t shared_mem_base_key = make_shared_mem_key(0, obj_utils.get_curr_object_idx(), 0);
+        int32_t shared_mem_key = make_shared_mem_key(obj_utils.get_curr_object_idx(), obj_utils.get_obj_index());
+        int32_t shared_mem_base_key = make_shared_mem_key(obj_utils.get_curr_object_idx(), 0);
         Geometry geo_curr_f;
         int shared_mem_curr_f = params.is_saving_all_geometry_enabled ? obj_utils.get_local_frame() : 0;
 
@@ -284,7 +298,7 @@ process_object_motion_blur(lua_State *L) {
 
             int local_frame = obj_utils.get_local_frame();
             if (params.is_saving_all_geometry_enabled || local_frame == 0 || local_frame == 1 || local_frame == 2) {
-                create_shared_mem(shared_mem_key, local_frame, geo_curr_f);
+                shared_mem->write(shared_mem_key, local_frame, geo_curr_f);
             }
         }
 
