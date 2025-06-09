@@ -44,34 +44,33 @@ get_self_path() {
 static const std::string dll_path = get_self_path();
 static const std::string shader_path = dll_path.empty() ? "C:" : dll_path.substr(0, dll_path.find_last_of("\\/"));
 
-// The object index is a uint16_t, but the maximum value is probably 15000, so 14 bits (max 16383) should be sufficient.
-// I don't think there are more than 262,144 individual objects.
-inline static constexpr int32_t
-make_shared_mem_key(uint16_t obj_idx, int32_t obj_index) {
+// The object index (obj_id) is a uint16_t, but the maximum value is probably 15000, so 14 bits (max 16383) should be
+// sufficient. I don't think there are more than 262,144 individual objects.
+inline static constexpr uint32_t
+make_shared_mem_key(uint16_t obj_id, int32_t obj_index) {
     uint32_t id_t = (static_cast<uint32_t>(obj_index & 0x3FFFF) << 14);
-    uint32_t id_b = static_cast<uint32_t>(obj_idx & 0x3FFF);
+    uint32_t id_b = static_cast<uint32_t>(obj_id & 0x3FFFu);
     uint32_t id = id_t | id_b;
-    return static_cast<int32_t>(id);
+    return id;
 }
 
 // Get shared memory class.
-std::unique_ptr<SharedMemory> &
+static std::unique_ptr<SharedMemory> &
 get_shared_mem() {
-    static std::unique_ptr<SharedMemory> shared_mem = std::make_unique<SharedMemory>();
+    static std::unique_ptr<SharedMemory> shared_mem = std::make_unique<SharedMemory>(3u);  // 8 elems per block.
     return shared_mem;
 }
 
 // Apply geometry to the transform.
 inline static void
-apply_geometry(Transform &transform, int32_t frame, int32_t shared_mem_key, const Geometry &default_geo) {
+apply_geometry(Transform &transform, uint32_t shared_mem_key, uint32_t slot_id, const Geometry &default_geo) {
     Geometry geo;
     auto &shared_mem = get_shared_mem();
 
-    if (shared_mem->read(shared_mem_key, frame, geo)) {
+    if (shared_mem->read(shared_mem_key, slot_id, geo))
         transform.apply_geometry(geo);
-    } else {
+    else
         transform.apply_geometry(default_geo);
-    }
 }
 
 // Calculate the transform before frame 0.
@@ -79,11 +78,11 @@ inline static std::variant<Transform, std::array<Transform, 2>>
 calc_neg_frame(const std::array<Transform, 3> &transforms, bool is_calc_2f_enabled = false) {
     Transform delta1 = transforms[1] - transforms[0];
     Transform delta2 = transforms[2] - transforms[1];
-    Transform transform_neg1f = transforms[0] - delta1 * 2 + delta2;
+    Transform transform_neg1f = transforms[0] - delta1 * 2.0f + delta2;
 
     // Uniformly accelerated linear motion
     if (is_calc_2f_enabled) {
-        return std::array<Transform, 2>{transform_neg1f, transform_neg1f - delta1 * 3 + delta2 * 2};
+        return std::array<Transform, 2>{transform_neg1f, transform_neg1f - delta1 * 3.0f + delta2 * 2.0f};
     } else {
         return transform_neg1f;
     }
@@ -229,48 +228,49 @@ render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, co
     gl_shader_kit.putpixeldata(img.data);
 }
 
-// Save Geometry data to shared memory. (-1, -2)
+// Save Geometry data to shared memory. (4, 3)
 static void
 save_minimal_geometry(int32_t shared_mem_key, const Geometry &default_geo) {
     Geometry geo_prev_1f;
     auto &shared_mem = get_shared_mem();
 
-    if (shared_mem->read(shared_mem_key, -1, geo_prev_1f))
-        shared_mem->write(shared_mem_key, -2, geo_prev_1f);
+    if (shared_mem->read(shared_mem_key, 4u, geo_prev_1f))
+        shared_mem->write(shared_mem_key, 3u, geo_prev_1f);
     else
-        shared_mem->write(shared_mem_key, -2, default_geo);
+        shared_mem->write(shared_mem_key, 3u, default_geo);
 
-    shared_mem->write(shared_mem_key, -1, default_geo);
+    shared_mem->write(shared_mem_key, 4u, default_geo);
 }
 
 // Clear handle.
 static void
-cleanup_geometry_data(bool is_enabled, int method, int32_t base_key, const ObjectUtils &obj_utils) {
+cleanup_geometry_data(bool is_enabled, int method, bool is_last_frame, bool is_last_obj_index, uint16_t obj_id) {
     auto &shared_mem = get_shared_mem();
+    uint32_t key1_mask = 0x3FFFu;  // 14 bits for object index.
+    uint32_t match_bits = static_cast<uint32_t>(obj_id) & key1_mask;
 
     if (is_enabled) {
         switch (method) {
             case 1:
                 break;  // pass
             case 2:
-                if (obj_utils.get_frame_num() == obj_utils.get_frame_end()
-                    && obj_utils.get_obj_index() == obj_utils.get_obj_num() - 1)
-                    shared_mem->cleanup_for_id(obj_utils.get_curr_object_idx());
+                if (is_last_frame && is_last_obj_index)
+                    shared_mem->cleanup_for_key1_mask(match_bits, key1_mask);
 
                 break;
             case 3:
                 shared_mem->cleanup_all_handle();
                 break;
             case 4:
-                shared_mem->cleanup_for_id(obj_utils.get_curr_object_idx());
+                shared_mem->cleanup_for_key1_mask(match_bits, key1_mask);
                 break;
             default:
-                uint16_t id = static_cast<uint16_t>(std::clamp(std::abs(static_cast<int64_t>(method)), 0i64, 65535i64));
-                shared_mem->cleanup_for_id(id);
+                uint32_t id = static_cast<uint32_t>(std::clamp(std::abs(static_cast<int64_t>(method)), 0i64, 15000i64));
+                shared_mem->cleanup_for_key1_mask(id, key1_mask);
                 break;
         }
-    } else if (shared_mem->handle_exists(base_key)) {
-        shared_mem->cleanup_for_id(obj_utils.get_curr_object_idx());
+    } else if (shared_mem->has_key1(match_bits)) {
+        shared_mem->cleanup_for_key1_mask(match_bits, key1_mask);
     }
 }
 
@@ -287,20 +287,18 @@ process_object_motion_blur(lua_State *L) {
             std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] There are too many individual objects."
                       << RESET_COL << std::endl;
 
-        int32_t shared_mem_key = make_shared_mem_key(obj_utils.get_curr_object_idx(), obj_utils.get_obj_index());
-        int32_t shared_mem_base_key = make_shared_mem_key(obj_utils.get_curr_object_idx(), 0);
-        Geometry geo_curr_f;
-        int shared_mem_curr_f = params.is_saving_all_geometry_enabled ? obj_utils.get_local_frame() : 0;
+        bool is_last_frame = obj_utils.get_frame_num() == obj_utils.get_frame_end();
+        bool is_last_obj_index = obj_utils.get_obj_index() == obj_utils.get_obj_num() - 1;
 
-        if (params.is_using_geometry_enabled) {
-            const auto &data = obj_utils.get_obj_data();
-            geo_curr_f = {data.ox, data.oy, data.cx, data.cy, data.zoom, data.rz};
+        uint16_t obj_id = obj_utils.get_curr_object_idx();
+        int32_t local_frame = obj_utils.get_local_frame();
+        uint32_t shared_mem_key = make_shared_mem_key(obj_id, obj_utils.get_obj_index());
+        uint32_t base_slot_id = params.is_saving_all_geometry_enabled ? std::max(local_frame - 1, 0) : 4u;
+        const auto &data = obj_utils.get_obj_data();
+        Geometry geo_curr_f = {data.ox, data.oy, data.cx, data.cy, data.zoom, data.rz};
 
-            int local_frame = obj_utils.get_local_frame();
-            if (params.is_saving_all_geometry_enabled || local_frame == 0 || local_frame == 1 || local_frame == 2) {
-                shared_mem->write(shared_mem_key, local_frame, geo_curr_f);
-            }
-        }
+        if (params.is_using_geometry_enabled && (params.is_saving_all_geometry_enabled || local_frame <= 2))
+            shared_mem->write(shared_mem_key, local_frame, geo_curr_f);
 
         // Invalid value.
         if (are_equal(params.shutter_angle, 0.0f))
@@ -314,8 +312,8 @@ process_object_motion_blur(lua_State *L) {
                 save_minimal_geometry(shared_mem_key, geo_curr_f);
 
             // Cleanup.
-            cleanup_geometry_data(params.is_using_geometry_enabled, params.geometry_data_cleanup_method,
-                                  shared_mem_base_key, obj_utils);
+            cleanup_geometry_data(params.is_using_geometry_enabled, params.geometry_data_cleanup_method, is_last_frame,
+                                  is_last_obj_index, obj_id);
             return 0;
         }
 
@@ -324,8 +322,8 @@ process_object_motion_blur(lua_State *L) {
             throw std::runtime_error("The samples are insufficient.");
 
         // Prepare the items needed for calculation.
-        bool is_prev_2f_needed = params.shutter_angle > 360.0f
-                              && (params.is_calc_neg1f_and_neg2f_enabled || obj_utils.get_local_frame() >= 2);
+        bool is_prev_2f_needed =
+                params.shutter_angle > 360.0f && (params.is_calc_neg1f_and_neg2f_enabled || local_frame >= 2);
 
         SegmentData<Displacements> disp_data;
         SegmentData<float> blur_amount_data;
@@ -334,21 +332,20 @@ process_object_motion_blur(lua_State *L) {
         Vec2<int> image_size(obj_utils.get_obj_w(), obj_utils.get_obj_h());
         Vec2<float> center(obj_utils.get_cx(), obj_utils.get_cy());
 
-        if (params.is_calc_neg1f_and_neg2f_enabled
-            && (obj_utils.get_local_frame() == 0 || obj_utils.get_local_frame() == 1)) {
+        if (params.is_calc_neg1f_and_neg2f_enabled && local_frame <= 1) {
             std::array<Transform, 3> transforms = {Transform(obj_utils, 0, OffsetType::Start),
                                                    Transform(obj_utils, 1, OffsetType::Start),
                                                    Transform(obj_utils, 2, OffsetType::Start)};
 
             if (params.is_using_geometry_enabled) {
                 for (auto &transform : transforms) {
-                    apply_geometry(transform, &transform - transforms.data(), shared_mem_key, geo_curr_f);
+                    apply_geometry(transform, shared_mem_key, &transform - transforms.data(), geo_curr_f);
                 }
             }
 
             // Calculate displacements from transforms.
             // Calculate frames that do not actually exist.
-            if (obj_utils.get_local_frame() == 0) {
+            if (local_frame == 0) {
                 auto transform_neg_frame = calc_neg_frame(transforms, is_prev_2f_needed);
                 std::visit(
                         [&](auto &&transform) {
@@ -379,14 +376,14 @@ process_object_motion_blur(lua_State *L) {
                 }
             }
             // Default.
-        } else if ((params.is_calc_neg1f_and_neg2f_enabled && obj_utils.get_local_frame() >= 2)
-                   || (!params.is_calc_neg1f_and_neg2f_enabled && obj_utils.get_local_frame() != 0)) {
+        } else if ((params.is_calc_neg1f_and_neg2f_enabled && local_frame >= 2)
+                   || (!params.is_calc_neg1f_and_neg2f_enabled && local_frame != 0)) {
             Transform transform_curr_f = Transform(obj_utils);
             Transform transform_prev_1f = Transform(obj_utils, -1);
 
             if (params.is_using_geometry_enabled) {
                 transform_curr_f.apply_geometry(geo_curr_f);
-                apply_geometry(transform_prev_1f, shared_mem_curr_f - 1, shared_mem_key, geo_curr_f);
+                apply_geometry(transform_prev_1f, shared_mem_key, base_slot_id, geo_curr_f);
             }
 
             disp_data.seg1 = Displacements(transform_curr_f, transform_prev_1f);
@@ -395,7 +392,7 @@ process_object_motion_blur(lua_State *L) {
                 Transform transform_prev_2f = Transform(obj_utils, -2);
 
                 if (params.is_using_geometry_enabled) {
-                    apply_geometry(transform_prev_2f, shared_mem_curr_f - 2, shared_mem_key, geo_curr_f);
+                    apply_geometry(transform_prev_2f, shared_mem_key, base_slot_id - 1u, geo_curr_f);
                 }
 
                 disp_data.seg2 = Displacements(transform_prev_1f, transform_prev_2f);
@@ -409,8 +406,8 @@ process_object_motion_blur(lua_State *L) {
             save_minimal_geometry(shared_mem_key, geo_curr_f);
 
         // Cleanup.
-        cleanup_geometry_data(params.is_using_geometry_enabled, params.geometry_data_cleanup_method,
-                              shared_mem_base_key, obj_utils);
+        cleanup_geometry_data(params.is_using_geometry_enabled, params.geometry_data_cleanup_method, is_last_frame,
+                              is_last_obj_index, obj_id);
 
         // Invalid value.
         if (!disp_data.seg1)
@@ -478,8 +475,7 @@ process_object_motion_blur(lua_State *L) {
                     cleanup_method_str = "Custom ID";
                     break;
             }
-            std::cout << "[ObjectMotionBlur][INFO]\nObject ID: " << obj_utils.get_curr_object_idx()
-                      << "\nIndex: " << obj_utils.get_obj_index()
+            std::cout << "[ObjectMotionBlur][INFO]\nObject ID: " << obj_id << "\nIndex: " << obj_utils.get_obj_index()
                       << "\nRequired Samples: " << total_required_samples + 1
                       << "\nGeo Clear Method: " << cleanup_method_str << std::endl;
         }
