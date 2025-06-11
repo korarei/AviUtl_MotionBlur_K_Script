@@ -31,6 +31,8 @@ AulMemory::AulMemory() : efp(nullptr), efpip(nullptr), loaded_filter_table(nullp
     int32_t raw_saving_flag = get_is_saving(exedit_base);
     if ((raw_saving_flag & ~1) != 0)
         throw std::runtime_error("Failed to retrieve is saving status.");
+
+    is_saving = (raw_saving_flag & 1) != 0;
 }
 
 uintptr_t
