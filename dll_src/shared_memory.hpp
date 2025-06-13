@@ -14,6 +14,9 @@ public:
     SharedMemory(uint32_t block_bits = 0u);
     ~SharedMemory();
 
+    SharedMemory(const SharedMemory &) = delete;
+    SharedMemory &operator=(const SharedMemory &) = delete;
+
     void cleanup_all_handle();
     void cleanup_for_key1_mask(uint32_t match_bits, uint32_t mask);
     bool has_key1(uint32_t key1) const;
@@ -84,7 +87,7 @@ public:
     }
 
 private:
-    static std::mutex mutex;
+    mutable std::mutex mutex;
 
     std::unordered_map<uint32_t, std::map<uint32_t, HANDLE>> handle_map;
     uint32_t block_bits;

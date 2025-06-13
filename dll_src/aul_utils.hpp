@@ -22,18 +22,19 @@ enum class OffsetType : int {
     Current
 };
 
-class AulPtrs {
+class AulMemory {
 public:
-    AulPtrs();
+    AulMemory();
 
-    AulPtrs(const AulPtrs &) = delete;
-    AulPtrs &operator=(const AulPtrs &) = delete;
+    AulMemory(const AulMemory &) = delete;
+    AulMemory &operator=(const AulMemory &) = delete;
 
 protected:
     ExEdit::Filter *efp;
     ExEdit::FilterProcInfo *efpip;
     ExEdit::Filter **loaded_filter_table;
     int32_t camera_mode;
+    bool is_saving;
 
     using GetCurrentProcessing = ExEdit::ObjectFilterIndex(__cdecl *)(ExEdit::FilterProcInfo *);
     GetCurrentProcessing get_curr_proc;
@@ -42,20 +43,22 @@ private:
     static constexpr uintptr_t VERSION_OFFSET = 0x4d726;
     static constexpr uintptr_t EFPP_OFFSET = 0x1b2b10;
     static constexpr uintptr_t EFPIPP_OFFSET = 0x1b2b20;
-    static constexpr uintptr_t GET_CURR_PROC_OFFSET = 0x047ba0;
     static constexpr uintptr_t LOADED_FILTER_TABLE_OFFSET = 0x187c98;
+    static constexpr uintptr_t GET_CURR_PROC_OFFSET = 0x047ba0;
     static constexpr uintptr_t CAMERA_MODE_OFFSET = 0x013596c;
+    static constexpr uintptr_t IS_SAVING_OFFSET = 0x1a52e4;
 
     uintptr_t get_exedit_base() const;
     bool check_exedit_version(uintptr_t exedit_base) const;
     ExEdit::Filter *get_exedit_filter_ptr(uintptr_t exedit_base) const;
     ExEdit::FilterProcInfo *get_exedit_filter_proc_info_ptr(uintptr_t exedit_base) const;
     ExEdit::Filter **get_loaded_filter_table(uintptr_t exedit_base) const;
-    int32_t get_camera_mode(uintptr_t exedit_base) const;
     GetCurrentProcessing get_get_curr_proc(uintptr_t exedit_base) const;
+    int32_t get_camera_mode(uintptr_t exedit_base) const;
+    int32_t get_is_saving(uintptr_t exedit_base) const;
 };
 
-class ObjectUtils : public AulPtrs {
+class ObjectUtils : public AulMemory {
 public:
     ObjectUtils();
 
@@ -79,7 +82,6 @@ public:
 
     void set_obj_w(int32_t w);
     void set_obj_h(int32_t h);
-    ExEdit::FilterProcInfo::Geometry &set_obj_data();
 
     static constexpr ExEdit::ObjectFilterIndex create_object_filter_index(uint16_t object_index, uint16_t filter_index);
     static constexpr float calc_ox(int32_t ox);
@@ -98,42 +100,24 @@ public:
     float calc_track_val(TrackName track_name, int32_t offset_frame = 0,
                          OffsetType offset_type = OffsetType::Current) const;
 
-    template <typename T>
-    bool create_shared_mem(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, const T &val) const {
-        return create_shared_mem_impl(key1, key2, handle_ptr, sizeof(T), &val);
-    }
-
-    template <typename T>
-    bool get_shared_mem(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo *handle, T &val) const {
-        return get_shared_mem_impl(key1, key2, handle, sizeof(T), &val);
-    }
-
-    void delete_shared_mem(int32_t key1, AviUtl::SharedMemoryInfo *handle) const;
-
 private:
-    int32_t local_frame;
-    bool is_saving;
     ExEdit::ObjectFilterIndex curr_ofi;
     uint16_t curr_object_idx;
     uint16_t curr_filter_idx;
+    int32_t local_frame;
     int32_t max_w;
     int32_t max_h;
-
-    bool create_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, int32_t size,
-                                const void *val) const;
-    bool get_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo *handle, int32_t size,
-                             void *val) const;
 };
 
 // Functions of AviUtl Pointers class.
 inline bool
-AulPtrs::check_exedit_version(uintptr_t exedit_base) const {
+AulMemory::check_exedit_version(uintptr_t exedit_base) const {
     int32_t version = *reinterpret_cast<int32_t *>(exedit_base + VERSION_OFFSET);
     return version == 9200;
 }
 
 inline ExEdit::Filter *
-AulPtrs::get_exedit_filter_ptr(uintptr_t exedit_base) const {
+AulMemory::get_exedit_filter_ptr(uintptr_t exedit_base) const {
     ExEdit::Filter **efpp = reinterpret_cast<ExEdit::Filter **>(exedit_base + EFPP_OFFSET);
     if (efpp && *efpp)
         return *efpp;
@@ -141,7 +125,7 @@ AulPtrs::get_exedit_filter_ptr(uintptr_t exedit_base) const {
 }
 
 inline ExEdit::FilterProcInfo *
-AulPtrs::get_exedit_filter_proc_info_ptr(uintptr_t exedit_base) const {
+AulMemory::get_exedit_filter_proc_info_ptr(uintptr_t exedit_base) const {
     ExEdit::FilterProcInfo **efpipp = reinterpret_cast<ExEdit::FilterProcInfo **>(exedit_base + EFPIPP_OFFSET);
     if (efpipp && *efpipp)
         return *efpipp;
@@ -149,18 +133,23 @@ AulPtrs::get_exedit_filter_proc_info_ptr(uintptr_t exedit_base) const {
 }
 
 inline ExEdit::Filter **
-AulPtrs::get_loaded_filter_table(uintptr_t exedit_base) const {
+AulMemory::get_loaded_filter_table(uintptr_t exedit_base) const {
     return reinterpret_cast<ExEdit::Filter **>(exedit_base + LOADED_FILTER_TABLE_OFFSET);
 }
 
+inline AulMemory::GetCurrentProcessing
+AulMemory::get_get_curr_proc(uintptr_t exedit_base) const {
+    return reinterpret_cast<GetCurrentProcessing>(exedit_base + GET_CURR_PROC_OFFSET);
+}
+
 inline int32_t
-AulPtrs::get_camera_mode(uintptr_t exedit_base) const {
+AulMemory::get_camera_mode(uintptr_t exedit_base) const {
     return *reinterpret_cast<int32_t *>(exedit_base + CAMERA_MODE_OFFSET);
 }
 
-inline AulPtrs::GetCurrentProcessing
-AulPtrs::get_get_curr_proc(uintptr_t exedit_base) const {
-    return reinterpret_cast<GetCurrentProcessing>(exedit_base + GET_CURR_PROC_OFFSET);
+inline int32_t
+AulMemory::get_is_saving(uintptr_t exedit_base) const {
+    return *reinterpret_cast<int32_t *>(exedit_base + IS_SAVING_OFFSET);
 }
 
 // Object Utilities Gettrers.
@@ -243,11 +232,6 @@ ObjectUtils::set_obj_w(int32_t w) {
 inline void
 ObjectUtils::set_obj_h(int32_t h) {
     efpip->obj_h = std::clamp(h, 0, max_h);
-}
-
-inline ExEdit::FilterProcInfo::Geometry &
-ObjectUtils::set_obj_data() {
-    return efpip->obj_data;
 }
 
 // calculate the geometry.
