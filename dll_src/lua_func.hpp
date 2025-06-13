@@ -12,18 +12,18 @@
 struct ObjectMotionBlurParams {
     const float shutter_angle;
     const float shutter_phase;
-    const int render_sample_limit;
-    const int preview_sample_limit;
-    const bool is_orig_img_visible;
-    const bool is_using_geometry_enabled;
-    const int geometry_data_cleanup_method;
-    const bool is_saving_all_geometry_enabled;
-    const bool is_keeping_size_enabled;
-    const bool is_calc_neg1f_and_neg2f_enabled;
-    const bool is_reload_enabled;
-    const bool is_printing_info_enabled;
-    const std::string shader_folder;
-    int sample_limit;
+    const int render_samp_lim;
+    const int preview_samp_lim;
+    const bool is_orig_img_mixed;
+    const bool is_geo_used;
+    const int geo_cleanup_method;
+    const bool is_all_geo_saved;
+    const bool is_img_size_keeped;
+    const bool is_neg_frame_simulated;
+    const bool is_shader_reloaded;
+    const bool is_info_printed;
+    const std::string shader_dir;
+    const int samp_lim;
 
     ObjectMotionBlurParams(lua_State *L, bool is_saving);
 };
