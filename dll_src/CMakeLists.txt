@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.20.0)
 project(MotionBlur_K VERSION 1.0.1 LANGUAGES CXX)
 
+# Set the project version.
+set(PROJECT_VERSION_SUFFIX "" CACHE STRING "Version suffix (e.g., alpha, beta, rc, etc.)")
+
+if(PROJECT_VERSION_SUFFIX)
+    set(FULL_VERSION "${PROJECT_VERSION} - ${PROJECT_VERSION_SUFFIX}")
+else()
+    set(FULL_VERSION "${PROJECT_VERSION}")
+endif()
 
 # Path Settings.
 set(LUA_DIR "${CMAKE_SOURCE_DIR}/../.lua")
@@ -17,10 +25,11 @@ set_target_properties(lua51 PROPERTIES
 add_library(${PROJECT_NAME} SHARED
     main.cpp
     object_motion_blur.cpp
+    aul_utils.cpp
+    lua_func.cpp
     shared_memory.cpp
     transform_utils.cpp
-    lua_func.cpp
-    aul_utils.cpp
+    utils.cpp
 )
 
 # Def file specification.
@@ -42,6 +51,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 # C++ version specification.
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
+
+# Definitions.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    PROJECT_VERSION="${FULL_VERSION}"
+)
 
 # Compiler Dependent Options.
 if (MSVC)
