@@ -17,6 +17,11 @@ Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType o
     cy(obj_utls.get_cy()) {}
 
 void
+Transform::apply_geometry() {
+    zoom = ZOOM_MIN;
+}
+
+void
 Transform::apply_geometry(const Geometry &geo) {
     x += ObjectUtils::calc_ox(geo.ox);
     y += ObjectUtils::calc_oy(geo.oy);

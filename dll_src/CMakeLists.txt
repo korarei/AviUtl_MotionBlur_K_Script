@@ -25,10 +25,11 @@ set_target_properties(lua51 PROPERTIES
 add_library(${PROJECT_NAME} SHARED
     main.cpp
     object_motion_blur.cpp
+    aul_utils.cpp
+    lua_func.cpp
     shared_memory.cpp
     transform_utils.cpp
-    lua_func.cpp
-    aul_utils.cpp
+    utils.cpp
 )
 
 # Def file specification.

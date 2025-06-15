@@ -17,32 +17,10 @@
 #include "shared_memory.hpp"
 #include "structs.hpp"
 #include "transform_utils.hpp"
+#include "utils.hpp"
 
 static constexpr const char *WARNING_COL = "\033[38;5;208m";
 static constexpr const char *RESET_COL = "\033[0m";
-
-// Get dll path.
-static const std::string
-get_self_path() {
-    HMODULE hModule = NULL;
-
-    if (!::GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, reinterpret_cast<LPCSTR>(&get_self_path),
-                              &hModule)) {
-        return "";
-    }
-
-    char path[MAX_PATH];
-    DWORD result = ::GetModuleFileNameA(hModule, path, MAX_PATH);
-    if (result == 0) {
-        return "";
-    }
-
-    return std::string(path);
-}
-
-// Shader path.
-static const std::string dll_path = get_self_path();
-static const std::string shader_path = dll_path.empty() ? "C:" : dll_path.substr(0, dll_path.find_last_of("\\/"));
 
 // The object index (obj_id) is a uint16_t, but the maximum value is probably 15000, so 14 bits (max 16383) should be
 // sufficient. I don't think there are more than 262,144 individual objects.
@@ -63,14 +41,14 @@ get_shared_mem() {
 
 // Apply geometry to the transform.
 inline static void
-apply_geometry(Transform &tf, uint32_t shared_mem_key, uint32_t slot_id, const Geometry &default_geo) {
-    Geometry geo;
+apply_geometry(Transform &tf, uint32_t shared_mem_key, uint32_t slot_id) {
     auto &shared_mem = get_shared_mem();
+    Geometry geo;
 
     if (shared_mem->read(shared_mem_key, slot_id, geo))
         tf.apply_geometry(geo);
     else
-        tf.apply_geometry(default_geo);
+        tf.apply_geometry();
 }
 
 // Calculate the transform before frame 0.
@@ -90,9 +68,11 @@ calc_neg_frame(const std::array<Transform, 3> &tf_array, bool is_calc_2f_enabled
 
 // Calculate the amounticient that determines the length of the blur.
 inline static constexpr float
-calc_blur_amt(float shutter_angle, float offset = 0.0f) {
+calc_blur_amt(float shutter_angle, bool is_seg2 = false) {
     constexpr float inv_360 = 1.0f / 360.0f;
-    return std::clamp(shutter_angle * inv_360 - offset, 0.0f, 1.0f);
+    float ratio = shutter_angle * inv_360;
+    float offset = is_seg2 ? 1.0f : 0.0f;
+    return std::clamp(ratio - offset, 0.0f, 1.0f);
 }
 
 // Calculate the amounticient that determines the offset movement amount.
@@ -195,8 +175,11 @@ resize_image(const Vec2<int> &img_size, const Vec2<float> &center, const Segment
 static void
 render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, const SegmentData<Steps> &steps_data,
                           const SegmentData<int> &samp_data) {
-    GLShaderKit gl_shader_kit(L);
+    std::string shader_path = get_self_dir() + params.shader_dir + "\\MotionBlur_K.frag";
+    if (!file_exists(shader_path))
+        throw std::runtime_error("Shader file not found: " + shader_path);
 
+    GLShaderKit gl_shader_kit(L);
     if (!gl_shader_kit.isInitialized())
         throw std::runtime_error("GL Shader Kit is not available.");
 
@@ -204,8 +187,7 @@ render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, co
 
     gl_shader_kit.activate();
     gl_shader_kit.setPlaneVertex(1);
-    gl_shader_kit.setShader((shader_path + params.shader_dir + "\\MotionBlur_K.frag").c_str(),
-                            params.is_shader_reloaded);
+    gl_shader_kit.setShader(shader_path.c_str(), params.is_shader_reloaded);
 
     gl_shader_kit.setTexture2D(0, img);
     Vec2<float> resolution = static_cast<Vec2<float>>(img.size);
@@ -286,7 +268,7 @@ process_object_motion_blur(lua_State *L) {
                       << RESET_COL << std::endl;
 
         bool is_last_frame = obj_utils.get_frame_num() == obj_utils.get_frame_end();
-        bool is_last_obj_index = obj_utils.get_obj_index() == obj_utils.get_obj_num() - 1;
+        bool is_last_obj_index = obj_utils.get_obj_index() == (obj_utils.get_obj_num() - 1);
 
         uint16_t obj_id = obj_utils.get_curr_object_idx();
         int32_t local_frame = obj_utils.get_local_frame();
@@ -295,7 +277,7 @@ process_object_motion_blur(lua_State *L) {
         const auto &data = obj_utils.get_obj_data();
         Geometry geo_curr_f = {data.ox, data.oy, data.cx, data.cy, data.zoom, data.rz};
 
-        auto reinit_geo = [&]() {
+        auto update_geo = [&]() {
             // Save geometry data.
             // This section is executed only when "Save All Geo" is disabled.
             if (params.is_geo_used && !params.is_all_geo_saved && obj_utils.get_camera_mode() != 3)
@@ -303,18 +285,20 @@ process_object_motion_blur(lua_State *L) {
 
             // Cleanup.
             if (is_last_obj_index)
-                cleanup_geo(params.is_geo_used, params.is_all_geo_saved, is_last_frame, obj_id);
+                cleanup_geo(params.is_geo_used, params.geo_cleanup_method, is_last_frame, obj_id);
         };
 
         if (params.is_geo_used && (params.is_all_geo_saved || local_frame <= 2))
             shared_mem->write(shared_mem_key, local_frame, geo_curr_f);
 
         // Invalid value.
-        if (are_equal(params.shutter_angle, 0.0f))
+        if (are_equal(params.shutter_angle, 0.0f)) {
+            update_geo();
             return 0;
+        }
 
         if (are_equal(obj_utils.calc_track_val(TrackName::Zoom), 0.0f)) {
-            reinit_geo();
+            update_geo();
             return 0;
         }
 
@@ -339,7 +323,7 @@ process_object_motion_blur(lua_State *L) {
 
             if (params.is_geo_used) {
                 for (auto &tf : tf_array) {
-                    apply_geometry(tf, shared_mem_key, &tf - tf_array.data(), geo_curr_f);
+                    apply_geometry(tf, shared_mem_key, &tf - tf_array.data());
                 }
             }
 
@@ -383,24 +367,24 @@ process_object_motion_blur(lua_State *L) {
 
             if (params.is_geo_used) {
                 tf_curr_f.apply_geometry(geo_curr_f);
-                apply_geometry(tf_prev_1f, shared_mem_key, base_slot_id, geo_curr_f);
+                apply_geometry(tf_prev_1f, shared_mem_key, base_slot_id);
             }
 
             disp_data.seg1 = Displacements(tf_curr_f, tf_prev_1f);
 
             if (is_prev_2f_needed) {
-                Transform transform_prev_2f = Transform(obj_utils, -2);
+                Transform tf_prev_2f = Transform(obj_utils, -2);
 
                 if (params.is_geo_used) {
-                    apply_geometry(transform_prev_2f, shared_mem_key, base_slot_id - 1u, geo_curr_f);
+                    apply_geometry(tf_prev_2f, shared_mem_key, base_slot_id - 1u);
                 }
 
-                disp_data.seg2 = Displacements(tf_prev_1f, transform_prev_2f);
+                disp_data.seg2 = Displacements(tf_prev_1f, tf_prev_2f);
             }
         }
 
         // Reinitialize geometry.
-        reinit_geo();
+        update_geo();
 
         // Invalid value.
         if (!disp_data.seg1)
@@ -415,7 +399,7 @@ process_object_motion_blur(lua_State *L) {
         int total_req_samp = *req_samp_data.seg1;
 
         if (is_prev_2f_rendered) {
-            blur_amt_data.seg2 = calc_blur_amt(params.shutter_angle, 1.0f);
+            blur_amt_data.seg2 = calc_blur_amt(params.shutter_angle, true);
             req_samp_data.seg2 =
                     disp_data.seg2->calc_required_samples(*blur_amt_data.seg2, image_size, scale_factor_seg1);
             total_req_samp = *req_samp_data.seg1 + *req_samp_data.seg2;
@@ -466,8 +450,12 @@ process_object_motion_blur(lua_State *L) {
                     cleanup_method_str = "Custom ID";
                     break;
             }
-            std::cout << "[ObjectMotionBlur][INFO]\nObject ID: " << obj_id << "\nIndex: " << obj_utils.get_obj_index()
-                      << "\nRequired Samples: " << total_req_samp + 1 << "\nGeo Clear Method: " << cleanup_method_str
+
+            if (obj_utils.get_obj_index() == 0) {
+                std::cout << "[ObjectMotionBlur][INFO]\nDll Version: " << get_version() << "\nObject ID: " << obj_id
+                          << "\nGeo Clear Method: " << cleanup_method_str << std::endl;
+            }
+            std::cout << "Index: " << obj_utils.get_obj_index() << ", Required Samples: " << total_req_samp + 1
                       << std::endl;
         }
 

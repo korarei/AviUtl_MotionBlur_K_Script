@@ -37,7 +37,7 @@ public:
         bool is_newly_created = false;
 
         if (old_handle == nullptr) {
-            new_handle = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, total_size, nullptr);
+            new_handle = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, total_size, nullptr); // 0 padding
             if (new_handle == nullptr)
                 return;
 

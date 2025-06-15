@@ -123,7 +123,7 @@ private:
     // epsilon value for floating-point comparison.
     static constexpr T epsilon() {
         if constexpr (std::is_floating_point_v<T>) {
-            return std::numeric_limits<T>::epsilon() * 100;  // Adjusted for better precision in comparisons.
+            return std::numeric_limits<T>::epsilon() * 1000;
         } else {
             return T(0);
         }
