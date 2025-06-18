@@ -1,3 +1,4 @@
+#include <tchar.h>
 #include <cstring>
 #include <stdexcept>
 #define NOMINMAX
@@ -5,7 +6,7 @@
 
 #include "aul_utils.hpp"
 
-AulPtrs::AulPtrs() : efp(nullptr), efpip(nullptr), loaded_filter_table(nullptr), camera_mode(-1) {
+AulMemory::AulMemory() : efp(nullptr), efpip(nullptr), loaded_filter_table(nullptr), camera_mode(-1), is_saving(false) {
     static uintptr_t exedit_base = get_exedit_base();
 
     efp = get_exedit_filter_ptr(exedit_base);
@@ -20,19 +21,25 @@ AulPtrs::AulPtrs() : efp(nullptr), efpip(nullptr), loaded_filter_table(nullptr),
     if (!loaded_filter_table)
         throw std::runtime_error("Failed to retrieve loaded filter table.");
 
-    camera_mode = get_camera_mode(exedit_base);
-    if (camera_mode < 0)
-        throw std::runtime_error("Invalid camera mode.");
-
     get_curr_proc = get_get_curr_proc(exedit_base);
     if (!get_curr_proc)
         throw std::runtime_error("Failed to retrieve get current processing.");
+
+    camera_mode = get_camera_mode(exedit_base);
+    if (camera_mode < 0)
+        throw std::runtime_error("Failed to retrieve camera mode.");
+
+    int32_t raw_saving_flag = get_is_saving(exedit_base);
+    if ((raw_saving_flag & ~1) != 0)
+        throw std::runtime_error("Failed to retrieve is saving status.");
+
+    is_saving = (raw_saving_flag & 1) != 0;
 }
 
 uintptr_t
-AulPtrs::get_exedit_base() const {
+AulMemory::get_exedit_base() const {
     static HMODULE handle = []() -> HMODULE {
-        HMODULE h = ::GetModuleHandleA("exedit.auf");
+        HMODULE h = ::GetModuleHandle(_T("exedit.auf"));
         if (!h)
             throw std::runtime_error("Failed to get ExEdit module handle.");
         return h;
@@ -50,12 +57,11 @@ AulPtrs::get_exedit_base() const {
 }
 
 ObjectUtils::ObjectUtils() :
-    AulPtrs(),
-    local_frame(efpip ? efpip->frame_num - efpip->objectp->frame_begin : 0),
-    is_saving(efp && efpip ? efp->aviutl_exfunc->is_saving(static_cast<AviUtl::EditHandle *>(efpip->editp)) : false),
+    AulMemory(),
     curr_ofi(efpip ? get_curr_proc(efpip) : create_object_filter_index(0, 0)),
     curr_object_idx(ExEdit::object(curr_ofi)),
-    curr_filter_idx(ExEdit::filter(curr_ofi)) {
+    curr_filter_idx(ExEdit::filter(curr_ofi)),
+    local_frame(efpip ? efpip->frame_num - efpip->objectp->frame_begin : 0) {
     AviUtl::SysInfo sys_info;
     efp->aviutl_exfunc->get_sys_info(nullptr, &sys_info);
     max_w = sys_info.max_w;
@@ -66,51 +72,8 @@ ObjectUtils::ObjectUtils() :
     }
 }
 
-bool
-ObjectUtils::create_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo **handle_ptr, int32_t size,
-                                    const void *val) const {
-    if (!efp)
-        throw std::runtime_error("ExEdit filter pointer is null.");
-
-    void *ptr = efp->aviutl_exfunc->create_shared_mem(key1, key2, size, handle_ptr);
-    if (ptr != nullptr && val != nullptr) {
-        std::memcpy(ptr, val, size);
-
-        return true;
-    }
-
-    return false;
-}
-
-bool
-ObjectUtils::get_shared_mem_impl(int32_t key1, int32_t key2, AviUtl::SharedMemoryInfo *handle, int32_t size,
-                                 void *val) const {
-    if (!efp)
-        throw std::runtime_error("ExEdit filter pointer is null.");
-
-    void *ptr = efp->aviutl_exfunc->get_shared_mem(key1, key2, handle);
-    if (ptr == nullptr || val == nullptr)
-        return false;
-
-    std::memcpy(val, ptr, size);
-
-    return true;
-}
-
-void
-ObjectUtils::delete_shared_mem(int32_t key1, AviUtl::SharedMemoryInfo *handle) const {
-    if (!efp)
-        throw std::runtime_error("ExEdit filter pointer is null.");
-
-    efp->aviutl_exfunc->delete_shared_mem(key1, handle);
-}
-
 float
 ObjectUtils::calc_track_val(TrackName track_name, int32_t offset_frame, OffsetType offset_type) const {
-    if (!efp)
-        throw std::runtime_error("ExEdit filter pointer is null.");
-    if (!efpip)
-        throw std::runtime_error("ExEdit filter Proc Info pointer is null.");
     if (!ExEdit::is_valid(curr_ofi))
         return 0.0f;
 

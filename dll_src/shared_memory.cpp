@@ -2,8 +2,6 @@
 
 #include <vector>
 
-std::mutex SharedMemory::mutex;
-
 SharedMemory::SharedMemory(uint32_t block_bits) : block_bits(block_bits) {}
 SharedMemory::~SharedMemory() { cleanup_all_handle_impl(); }
 

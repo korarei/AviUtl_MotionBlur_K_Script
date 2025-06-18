@@ -17,6 +17,11 @@ Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType o
     cy(obj_utls.get_cy()) {}
 
 void
+Transform::apply_geometry() {
+    zoom = ZOOM_MIN;
+}
+
+void
 Transform::apply_geometry(const Geometry &geo) {
     x += ObjectUtils::calc_ox(geo.ox);
     y += ObjectUtils::calc_oy(geo.oy);
@@ -31,7 +36,7 @@ Transform::apply_geometry(const Geometry &geo) {
 Displacements::Displacements(const Transform &from, const Transform &to) :
     global_location((to.get_location() - from.get_location())),
     global_distance(global_location.norm(2)),
-    local_location(global_location.rotation(-from.get_rz(), 100.0f / from.get_zoom())),
+    local_location(global_location.rotate(-from.get_rz(), 100.0f / from.get_zoom())),
     local_distance(local_location.norm(2)),
     global_zoom((to.get_zoom() - from.get_zoom())),
     local_zoom(global_zoom / from.get_zoom()),
@@ -76,7 +81,7 @@ Displacements::calc_steps_impl(float loc_amount, float scale_amount, float rz_am
         return Steps{Vec2<float>(0.0f, 0.0f), 1.0f, 0.0f};
 
     float inv_samples = 1.0f / static_cast<float>(std::max(1, samples));
-    Vec2<float> step_location = local_location.rotation(offset_angle_rad, loc_amount * inv_samples);
+    Vec2<float> step_location = local_location.rotate(offset_angle_rad, loc_amount * inv_samples);
     float step_scale = std::pow(std::max(1.0f + local_zoom * scale_amount, ZOOM_MIN), inv_samples);
     float step_rz_rad = rz_rad * rz_amount * inv_samples;
 
@@ -86,16 +91,16 @@ Displacements::calc_steps_impl(float loc_amount, float scale_amount, float rz_am
 Vec2<float>
 Displacements::calc_relative_location(float amount, float offset_angle_rad) const {
     if (are_equal(amount, 0.0f)) {
-        return center_from.rotation(-offset_angle_rad) - center_to.rotation(-offset_angle_rad);
+        return center_from.rotate(-offset_angle_rad) - center_to.rotate(-offset_angle_rad);
     } else if (are_equal(amount, 1.0f)) {
-        Vec2<float> rotated_from = center_from.rotation(-offset_angle_rad);
-        Vec2<float> rotated_to = center_to.rotation(rz_rad - offset_angle_rad, calc_relative_scale());
+        Vec2<float> rotated_from = center_from.rotate(-offset_angle_rad);
+        Vec2<float> rotated_to = center_to.rotate(rz_rad - offset_angle_rad, calc_relative_scale());
 
         return rotated_from + local_location - rotated_to;
     } else {
-        Vec2<float> rotated_from = center_from.rotation(-offset_angle_rad);
+        Vec2<float> rotated_from = center_from.rotate(-offset_angle_rad);
         Vec2<float> scaled_local = local_location * amount;
-        Vec2<float> rotated_to = center_to.rotation(rz_rad * amount - offset_angle_rad, calc_relative_scale(amount));
+        Vec2<float> rotated_to = center_to.rotate(rz_rad * amount - offset_angle_rad, calc_relative_scale(amount));
 
         return rotated_from + scaled_local - rotated_to;
     }

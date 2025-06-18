@@ -14,6 +14,9 @@ public:
     SharedMemory(uint32_t block_bits = 0u);
     ~SharedMemory();
 
+    SharedMemory(const SharedMemory &) = delete;
+    SharedMemory &operator=(const SharedMemory &) = delete;
+
     void cleanup_all_handle();
     void cleanup_for_key1_mask(uint32_t match_bits, uint32_t mask);
     bool has_key1(uint32_t key1) const;
@@ -34,7 +37,7 @@ public:
         bool is_newly_created = false;
 
         if (old_handle == nullptr) {
-            new_handle = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, total_size, nullptr);
+            new_handle = ::CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, total_size, nullptr); // 0 padding
             if (new_handle == nullptr)
                 return;
 
@@ -43,7 +46,7 @@ public:
             new_handle = old_handle;
         }
 
-        T *ptr = static_cast<T *>(MapViewOfFile(new_handle, FILE_MAP_ALL_ACCESS, 0, 0, total_size));
+        T *ptr = static_cast<T *>(::MapViewOfFile(new_handle, FILE_MAP_ALL_ACCESS, 0, 0, total_size));
         if (ptr == nullptr) {
             if (is_newly_created)
                 CloseHandle(new_handle);
@@ -52,7 +55,7 @@ public:
         }
 
         std::memcpy(ptr + block_offset, &val, size);
-        UnmapViewOfFile(ptr);
+        ::UnmapViewOfFile(ptr);
 
         if (is_newly_created)
             set_shared_mem_handle(key1, block_id, new_handle);
@@ -72,19 +75,19 @@ public:
         if (handle == nullptr)
             return false;
 
-        T *ptr = static_cast<T *>(MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, total_size));
+        T *ptr = static_cast<T *>(::MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, total_size));
         if (ptr == nullptr) {
             return false;
         }
 
         std::memcpy(&val, ptr + block_offset, size);
-        UnmapViewOfFile(ptr);
+        ::UnmapViewOfFile(ptr);
 
         return true;
     }
 
 private:
-    static std::mutex mutex;
+    mutable std::mutex mutex;
 
     std::unordered_map<uint32_t, std::map<uint32_t, HANDLE>> handle_map;
     uint32_t block_bits;

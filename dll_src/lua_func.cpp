@@ -8,18 +8,18 @@
 ObjectMotionBlurParams::ObjectMotionBlurParams(lua_State *L, bool is_saving) :
     shutter_angle(lua_isnumber(L, 1) ? std::clamp(static_cast<float>(lua_tonumber(L, 1)), 0.0f, 720.0f) : 180.0f),
     shutter_phase(lua_isnumber(L, 2) ? std::clamp(static_cast<float>(lua_tonumber(L, 2)), -360.0f, 360.0f) : -90.0f),
-    render_sample_limit(lua_isnumber(L, 3) ? std::max(static_cast<int>(lua_tointeger(L, 3)), 1) : 256),
-    preview_sample_limit(lua_isnumber(L, 4) ? std::max(static_cast<int>(lua_tointeger(L, 4)), 0) : 0),
-    is_orig_img_visible(lua_isboolean(L, 5) ? lua_toboolean(L, 5) : false),
-    is_using_geometry_enabled(lua_isboolean(L, 6) ? lua_toboolean(L, 6) : false),
-    geometry_data_cleanup_method(lua_isnumber(L, 7) ? lua_tointeger(L, 7) : 1),
-    is_saving_all_geometry_enabled(lua_isboolean(L, 8) ? lua_toboolean(L, 8) : true),
-    is_keeping_size_enabled(lua_isboolean(L, 9) ? lua_toboolean(L, 9) : false),
-    is_calc_neg1f_and_neg2f_enabled(lua_isboolean(L, 10) ? lua_toboolean(L, 10) : true),
-    is_reload_enabled(lua_isboolean(L, 11) ? lua_toboolean(L, 11) : false),
-    is_printing_info_enabled(lua_isboolean(L, 12) ? lua_toboolean(L, 12) : false),
-    shader_folder(lua_isstring(L, 13) ? lua_tostring(L, 13) : "\\shaders"),
-    sample_limit(preview_sample_limit != 0 && !is_saving ? preview_sample_limit : render_sample_limit) {}
+    render_samp_lim(lua_isnumber(L, 3) ? std::max(static_cast<int>(lua_tointeger(L, 3)), 1) : 256),
+    preview_samp_lim(lua_isnumber(L, 4) ? std::max(static_cast<int>(lua_tointeger(L, 4)), 0) : 0),
+    mix_orig_img(lua_isboolean(L, 5) ? lua_toboolean(L, 5) : false),
+    use_geo(lua_isboolean(L, 6) ? lua_toboolean(L, 6) : false),
+    geo_cleanup_method(lua_isnumber(L, 7) ? lua_tointeger(L, 7) : 1),
+    save_all_geo(lua_isboolean(L, 8) ? lua_toboolean(L, 8) : true),
+    keep_size(lua_isboolean(L, 9) ? lua_toboolean(L, 9) : false),
+    calc_neg_f(lua_isboolean(L, 10) ? lua_toboolean(L, 10) : true),
+    reload_shader(lua_isboolean(L, 11) ? lua_toboolean(L, 11) : false),
+    print_info(lua_isboolean(L, 12) ? lua_toboolean(L, 12) : false),
+    shader_dir(lua_isstring(L, 13) ? lua_tostring(L, 13) : "\\shaders"),
+    samp_lim((preview_samp_lim != 0 && !is_saving) ? preview_samp_lim : render_samp_lim) {}
 
 // Enable the use of GLShaderKit in C++
 GLShaderKit::GLShaderKit(lua_State *L) : L(L) {
@@ -89,7 +89,7 @@ GLShaderKit::setPlaneVertex(int n) const {
 }
 
 void
-GLShaderKit::setShader(std::string shader_path, bool force_reload) const {
+GLShaderKit::setShader(const std::string &shader_path, bool force_reload) const {
     lua_getfield(L, -1, "setShader");
     lua_pushstring(L, shader_path.c_str());
     lua_pushboolean(L, force_reload);

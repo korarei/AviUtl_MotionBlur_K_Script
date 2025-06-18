@@ -1,15 +1,9 @@
 #pragma once
 
-#define _USE_MATH_DEFINES
-#include <cmath>
-
 #include "aul_utils.hpp"
 #include "structs.hpp"
 #include "vector_2d.hpp"
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+#include "utils.hpp"
 
 #define ZOOM_MIN 1e-2f
 
@@ -22,18 +16,6 @@ enum class Coords : int {
     Global,
     Local
 };
-
-inline bool
-are_equal(float a, float b) {
-    constexpr float epsilon = 1e-4f;
-    return std::fabsf(a - b) < epsilon;
-}
-
-inline constexpr float
-to_rad(float deg) {
-    constexpr float inv_180 = 1.0f / 180.0f;
-    return deg * static_cast<float>(M_PI) * inv_180;
-}
 
 class Transform {
 public:
@@ -49,6 +31,7 @@ public:
     float get_rz(AngleUnit unit = AngleUnit::Rad) const;
     Vec2<float> get_center() const;
 
+    void apply_geometry();
     void apply_geometry(const Geometry &geo);
 
 private:

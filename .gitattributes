@@ -4,3 +4,7 @@
 *.scn text eol=crlf linguist-language=Lua working-tree-encoding=cp932
 *.cam text eol=crlf linguist-language=Lua working-tree-encoding=cp932
 *.tra text eol=crlf linguist-language=Lua working-tree-encoding=cp932
+*.h text eol=crlf linguist-language=C working-tree-encoding=UTF-8
+*.c text eol=crlf linguist-language=C working-tree-encoding=UTF-8
+*.hpp text eol=crlf linguist-language=C++ working-tree-encoding=UTF-8
+*.cpp text eol=crlf linguist-language=C++ working-tree-encoding=UTF-8

@@ -14,15 +14,16 @@ struct Image {
 
 // obj.ox etc.
 struct Geometry {
+    bool is_valid;
     int32_t ox, oy;
     int32_t cx, cy;  // For the future.
     int32_t zoom;
     int32_t rz;
 
-    constexpr Geometry() : ox(0), oy(0), cx(0), cy(0), zoom(0), rz(0) {}
+    constexpr Geometry() : is_valid(true), ox(0), oy(0), cx(0), cy(0), zoom(0), rz(0) {}
 
     constexpr Geometry(int32_t ox_, int32_t oy_, int32_t cx_, int32_t cy_, int32_t zoom_, int32_t rz_) :
-        ox(ox_), oy(oy_), cx(cx_), cy(cy_), zoom(zoom_), rz(rz_) {}
+        is_valid(true), ox(ox_), oy(oy_), cx(cx_), cy(cy_), zoom(zoom_), rz(rz_) {}
 };
 
 // A structure to store data for each segment.
