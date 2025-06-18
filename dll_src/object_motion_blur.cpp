@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -23,7 +24,7 @@ static constexpr const char *WARNING_COL = "\033[38;5;208m";
 static constexpr const char *RESET_COL = "\033[0m";
 
 // The object index (obj_id) is a uint16_t, but the maximum value is probably 15000, so 14 bits (max 16383) should be
-// sufficient. I don't think there are more than 262,144 individual objects.
+// sufficient. I don't think there are more than 262,144 (2^18) individual objects.
 inline static constexpr uint32_t
 make_shared_mem_key(uint16_t obj_id, int32_t obj_index) {
     uint32_t id_t = (static_cast<uint32_t>(obj_index & 0x3FFFF) << 14);
@@ -41,25 +42,25 @@ get_shared_mem() {
 
 // Apply geometry to the transform.
 inline static void
-apply_geometry(Transform &tf, uint32_t shared_mem_key, uint32_t slot_id) {
+apply_geo(Transform &tf, uint32_t shared_mem_key, uint32_t slot_id, const Geometry &default_geo) {
     auto &shared_mem = get_shared_mem();
     Geometry geo;
 
-    if (shared_mem->read(shared_mem_key, slot_id, geo))
+    if (shared_mem->read(shared_mem_key, slot_id, geo) && geo.is_valid)
         tf.apply_geometry(geo);
     else
-        tf.apply_geometry();
+        tf.apply_geometry(default_geo);
 }
 
 // Calculate the transform before frame 0.
 inline static std::variant<Transform, std::array<Transform, 2>>
-calc_neg_frame(const std::array<Transform, 3> &tf_array, bool is_calc_2f_enabled = false) {
+calc_neg_frame(const std::array<Transform, 3> &tf_array, bool will_calc_2f = false) {
     Transform d1 = tf_array[1] - tf_array[0];
     Transform d2 = tf_array[2] - tf_array[1];
     Transform tf_neg_1f = tf_array[0] - d1 * 2.0f + d2;
 
     // Uniformly accelerated linear motion
-    if (is_calc_2f_enabled) {
+    if (will_calc_2f) {
         return std::array<Transform, 2>{tf_neg_1f, tf_neg_1f - d1 * 3.0f + d2 * 2.0f};
     } else {
         return tf_neg_1f;
@@ -101,7 +102,7 @@ calc_offset_amt(const SegmentData<Displacements> &disp_data, float shutter_angle
 
 // Calculate the actual number of samples to be used.
 inline static constexpr int
-calc_samples(int required, int sample_limit, int total_req_samp) {
+calc_samp(int required, int sample_limit, int total_req_samp) {
     float ratio = static_cast<float>(sample_limit) * static_cast<float>(required) / static_cast<float>(total_req_samp);
     return std::clamp(required, 1, static_cast<int>(std::max(ratio, 1.0f)));
 }
@@ -175,9 +176,9 @@ resize_image(const Vec2<int> &img_size, const Vec2<float> &center, const Segment
 static void
 render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, const SegmentData<Steps> &steps_data,
                           const SegmentData<int> &samp_data) {
-    std::string shader_path = get_self_dir() + params.shader_dir + "\\MotionBlur_K.frag";
-    if (!file_exists(shader_path))
-        throw std::runtime_error("Shader file not found: " + shader_path);
+    std::filesystem::path shader_path = get_self_dir() / params.shader_dir.relative_path() / "MotionBlur_K.frag";
+    if (!std::filesystem::exists(shader_path))
+        throw std::runtime_error("Shader file not found: " + shader_path.string());
 
     GLShaderKit gl_shader_kit(L);
     if (!gl_shader_kit.isInitialized())
@@ -187,14 +188,14 @@ render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, co
 
     gl_shader_kit.activate();
     gl_shader_kit.setPlaneVertex(1);
-    gl_shader_kit.setShader(shader_path.c_str(), params.is_shader_reloaded);
+    gl_shader_kit.setShader(shader_path.string(), params.reload_shader);
 
     gl_shader_kit.setTexture2D(0, img);
     Vec2<float> resolution = static_cast<Vec2<float>>(img.size);
     Vec2<float> pivot = img.center + resolution * 0.5f;
     gl_shader_kit.setFloat("resolution", {resolution.get_x(), resolution.get_y()});
     gl_shader_kit.setFloat("pivot", {pivot.get_x(), pivot.get_y()});
-    gl_shader_kit.setInt("is_orig_img_visible", {params.is_orig_img_mixed});
+    gl_shader_kit.setInt("is_orig_img_visible", {params.mix_orig_img});
     gl_shader_kit.setInt("samples", {*samp_data.seg1, samp_data.seg2 ? *samp_data.seg2 : 0});
 
     gl_shader_kit.setParamsForOMBStep("offset", *steps_data.offset);
@@ -262,33 +263,34 @@ process_object_motion_blur(lua_State *L) {
         auto &shared_mem = get_shared_mem();
         ObjectUtils obj_utils;
         ObjectMotionBlurParams params(L, obj_utils.get_is_saving());
-        // Required components for saving geometry data.
-        if (params.is_geo_used && obj_utils.get_obj_num() > 262144)
+
+        if (params.use_geo && obj_utils.get_obj_num() > 262144)  // 2^18
             std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] There are too many individual objects."
                       << RESET_COL << std::endl;
 
+        // Required components for saving geometry data.
         bool is_last_frame = obj_utils.get_frame_num() == obj_utils.get_frame_end();
         bool is_last_obj_index = obj_utils.get_obj_index() == (obj_utils.get_obj_num() - 1);
-
         uint16_t obj_id = obj_utils.get_curr_object_idx();
         int32_t local_frame = obj_utils.get_local_frame();
+
         uint32_t shared_mem_key = make_shared_mem_key(obj_id, obj_utils.get_obj_index());
-        uint32_t base_slot_id = params.is_all_geo_saved ? std::max(local_frame - 1, 0) : 4u;
+        uint32_t base_slot_id = params.save_all_geo ? std::max(local_frame - 1, 0) : 4u;
         const auto &data = obj_utils.get_obj_data();
         Geometry geo_curr_f = {data.ox, data.oy, data.cx, data.cy, data.zoom, data.rz};
 
         auto update_geo = [&]() {
             // Save geometry data.
             // This section is executed only when "Save All Geo" is disabled.
-            if (params.is_geo_used && !params.is_all_geo_saved && obj_utils.get_camera_mode() != 3)
+            if (params.use_geo && !params.save_all_geo && obj_utils.get_camera_mode() != 3)
                 save_minimal_geo(shared_mem_key, geo_curr_f);
 
             // Cleanup.
             if (is_last_obj_index)
-                cleanup_geo(params.is_geo_used, params.geo_cleanup_method, is_last_frame, obj_id);
+                cleanup_geo(params.use_geo, params.geo_cleanup_method, is_last_frame, obj_id);
         };
 
-        if (params.is_geo_used && (params.is_all_geo_saved || local_frame <= 2))
+        if (params.use_geo && (params.save_all_geo || local_frame <= 2))
             shared_mem->write(shared_mem_key, local_frame, geo_curr_f);
 
         // Invalid value.
@@ -307,7 +309,7 @@ process_object_motion_blur(lua_State *L) {
             throw std::runtime_error("The samples are insufficient.");
 
         // Prepare the items needed for calculation.
-        bool is_prev_2f_needed = params.shutter_angle > 360.0f && (params.is_neg_frame_simulated || local_frame >= 2);
+        bool should_calc_prev_2f = params.shutter_angle > 360.0f && (params.calc_neg_f || local_frame >= 2);
 
         SegmentData<Displacements> disp_data;
         SegmentData<float> blur_amt_data;
@@ -316,21 +318,22 @@ process_object_motion_blur(lua_State *L) {
         Vec2<int> image_size(obj_utils.get_obj_w(), obj_utils.get_obj_h());
         Vec2<float> center(obj_utils.get_cx(), obj_utils.get_cy());
 
-        if (params.is_neg_frame_simulated && local_frame <= 1) {
+        // calculate the displacements.
+        if (params.calc_neg_f && local_frame <= 1) {
             std::array<Transform, 3> tf_array = {Transform(obj_utils, 0, OffsetType::Start),
                                                  Transform(obj_utils, 1, OffsetType::Start),
                                                  Transform(obj_utils, 2, OffsetType::Start)};
 
-            if (params.is_geo_used) {
+            if (params.use_geo) {
                 for (auto &tf : tf_array) {
-                    apply_geometry(tf, shared_mem_key, &tf - tf_array.data());
+                    apply_geo(tf, shared_mem_key, &tf - tf_array.data(), geo_curr_f);
                 }
             }
 
             // Calculate displacements from transforms.
             // Calculate frames that do not actually exist.
             if (local_frame == 0) {
-                auto tf_neg_f = calc_neg_frame(tf_array, is_prev_2f_needed);
+                auto tf_neg_f = calc_neg_frame(tf_array, should_calc_prev_2f);
                 std::visit(
                         [&](auto &&tf) {
                             if constexpr (std::is_same_v<std::decay_t<decltype(tf)>, Transform>) {
@@ -343,7 +346,7 @@ process_object_motion_blur(lua_State *L) {
                         },
                         tf_neg_f);
             } else {
-                if (!is_prev_2f_needed) {
+                if (!should_calc_prev_2f) {
                     disp_data.seg1 = Displacements(tf_array[1], tf_array[0]);
                 } else {
                     auto tf_neg_f = calc_neg_frame(tf_array);
@@ -359,24 +362,22 @@ process_object_motion_blur(lua_State *L) {
                             tf_neg_f);
                 }
             }
-            // Default.
-        } else if ((params.is_neg_frame_simulated && local_frame >= 2)
-                   || (!params.is_neg_frame_simulated && local_frame != 0)) {
+        } else if (local_frame != 0) {  // Default case.
             Transform tf_curr_f = Transform(obj_utils);
             Transform tf_prev_1f = Transform(obj_utils, -1);
 
-            if (params.is_geo_used) {
+            if (params.use_geo) {
                 tf_curr_f.apply_geometry(geo_curr_f);
-                apply_geometry(tf_prev_1f, shared_mem_key, base_slot_id);
+                apply_geo(tf_prev_1f, shared_mem_key, base_slot_id, geo_curr_f);
             }
 
             disp_data.seg1 = Displacements(tf_curr_f, tf_prev_1f);
 
-            if (is_prev_2f_needed) {
+            if (should_calc_prev_2f) {
                 Transform tf_prev_2f = Transform(obj_utils, -2);
 
-                if (params.is_geo_used) {
-                    apply_geometry(tf_prev_2f, shared_mem_key, base_slot_id - 1u);
+                if (params.use_geo) {
+                    apply_geo(tf_prev_2f, shared_mem_key, base_slot_id - 1u, geo_curr_f);
                 }
 
                 disp_data.seg2 = Displacements(tf_prev_1f, tf_prev_2f);
@@ -390,7 +391,7 @@ process_object_motion_blur(lua_State *L) {
         if (!disp_data.seg1)
             return 0;
 
-        bool is_prev_2f_rendered = disp_data.seg2 && disp_data.seg2->get_is_moved();  // Render to 2 frames ago.
+        bool can_render_prev_2f = disp_data.seg2 && disp_data.seg2->get_is_moved();  // Render to 2 frames ago.
         float scale_factor_seg1 = disp_data.seg1->calc_relative_scale();
 
         // Calculate the required samples.
@@ -398,7 +399,7 @@ process_object_motion_blur(lua_State *L) {
         req_samp_data.seg1 = disp_data.seg1->calc_required_samples(*blur_amt_data.seg1, image_size, 1.0f);
         int total_req_samp = *req_samp_data.seg1;
 
-        if (is_prev_2f_rendered) {
+        if (can_render_prev_2f) {
             blur_amt_data.seg2 = calc_blur_amt(params.shutter_angle, true);
             req_samp_data.seg2 =
                     disp_data.seg2->calc_required_samples(*blur_amt_data.seg2, image_size, scale_factor_seg1);
@@ -413,17 +414,17 @@ process_object_motion_blur(lua_State *L) {
         auto offset_amt = calc_offset_amt(disp_data, params.shutter_angle, params.shutter_phase);
         steps_data.offset = disp_data.seg1->calc_steps(offset_amt, 1, 0.0f);
 
-        samp_data.seg1 = calc_samples(*req_samp_data.seg1, params.samp_lim - 1, total_req_samp);
+        samp_data.seg1 = calc_samp(*req_samp_data.seg1, params.samp_lim - 1, total_req_samp);
         steps_data.seg1 = disp_data.seg1->calc_steps(*blur_amt_data.seg1, *samp_data.seg1, steps_data.offset->rz_rad);
 
-        if (is_prev_2f_rendered) {
-            samp_data.seg2 = calc_samples(*req_samp_data.seg2, params.samp_lim - 1, total_req_samp);
+        if (can_render_prev_2f) {
+            samp_data.seg2 = calc_samp(*req_samp_data.seg2, params.samp_lim - 1, total_req_samp);
             steps_data.seg2 =
                     disp_data.seg2->calc_steps(*blur_amt_data.seg2, *samp_data.seg2, steps_data.offset->rz_rad);
         }
 
         // Resize.
-        if (!params.is_img_size_keeped)
+        if (!params.keep_size)
             resize_image(image_size, center, disp_data, blur_amt_data, *steps_data.offset, scale_factor_seg1,
                          Vec2<int>(obj_utils.get_max_w(), obj_utils.get_max_h()), L);
 
@@ -431,7 +432,7 @@ process_object_motion_blur(lua_State *L) {
         render_object_motion_blur(L, params, steps_data, samp_data);
 
         // Print information.params.is_printing_info_enabled
-        if (params.is_info_printed) {
+        if (params.print_info) {
             std::string cleanup_method_str;
             switch (params.geo_cleanup_method) {
                 case 1:

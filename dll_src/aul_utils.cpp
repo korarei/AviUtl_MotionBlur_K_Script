@@ -1,3 +1,4 @@
+#include <tchar.h>
 #include <cstring>
 #include <stdexcept>
 #define NOMINMAX
@@ -38,7 +39,7 @@ AulMemory::AulMemory() : efp(nullptr), efpip(nullptr), loaded_filter_table(nullp
 uintptr_t
 AulMemory::get_exedit_base() const {
     static HMODULE handle = []() -> HMODULE {
-        HMODULE h = ::GetModuleHandleA("exedit.auf");
+        HMODULE h = ::GetModuleHandle(_T("exedit.auf"));
         if (!h)
             throw std::runtime_error("Failed to get ExEdit module handle.");
         return h;
@@ -73,10 +74,6 @@ ObjectUtils::ObjectUtils() :
 
 float
 ObjectUtils::calc_track_val(TrackName track_name, int32_t offset_frame, OffsetType offset_type) const {
-    if (!efp)
-        throw std::runtime_error("ExEdit filter pointer is null.");
-    if (!efpip)
-        throw std::runtime_error("ExEdit filter Proc Info pointer is null.");
     if (!ExEdit::is_valid(curr_ofi))
         return 0.0f;
 

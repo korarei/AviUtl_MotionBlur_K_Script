@@ -2,9 +2,11 @@
 
 #include <array>
 #include <cstdint>
-#include <lua.hpp>
+#include <filesystem>
 #include <string>
 #include <vector>
+
+#include <lua.hpp>
 
 #include "structs.hpp"
 #include "vector_2d.hpp"
@@ -14,15 +16,15 @@ struct ObjectMotionBlurParams {
     const float shutter_phase;
     const int render_samp_lim;
     const int preview_samp_lim;
-    const bool is_orig_img_mixed;
-    const bool is_geo_used;
+    const bool mix_orig_img;
+    const bool use_geo;
     const int geo_cleanup_method;
-    const bool is_all_geo_saved;
-    const bool is_img_size_keeped;
-    const bool is_neg_frame_simulated;
-    const bool is_shader_reloaded;
-    const bool is_info_printed;
-    const std::string shader_dir;
+    const bool save_all_geo;
+    const bool keep_size;
+    const bool calc_neg_f;
+    const bool reload_shader;
+    const bool print_info;
+    const std::filesystem::path shader_dir;
     const int samp_lim;
 
     ObjectMotionBlurParams(lua_State *L, bool is_saving);
@@ -39,14 +41,14 @@ public:
     bool activate() const;
     void deactivate() const;
     void setPlaneVertex(int n) const;
-    void setShader(std::string shader_path, bool force_reload) const;
+    void setShader(const std::string &shader_path, bool force_reload) const;
     void setTexture2D(int unit, const Image &img) const;
     void setFloat(std::string name, const std::vector<float> &vec) const;
     void setInt(std::string name, const std::vector<int> &vec) const;
     void setMatrix(std::string name, std::string type, bool transpose, float angle_rad) const;
     void draw(std::string mode, Image &img) const;
 
-    void setParamsForOMBStep(const std::string &name, const Steps &steps) const; // OMBStep: Object Motion Blur Step
+    void setParamsForOMBStep(const std::string &name, const Steps &steps) const;  // OMBStep: Object Motion Blur Step
 
 private:
     lua_State *L;

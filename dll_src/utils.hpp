@@ -2,6 +2,7 @@
 
 #define _USE_MATH_DEFINES
 #include <cmath>
+#include <filesystem>
 #include <string>
 
 #ifndef M_PI
@@ -29,8 +30,5 @@ get_version() {
     return PROJECT_VERSION;
 }
 
-const std::string &
+const std::filesystem::path &
 get_self_dir();
-
-bool
-file_exists(const std::string &file_path);
