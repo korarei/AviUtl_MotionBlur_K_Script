@@ -58,7 +58,7 @@ AulMemory::get_exedit_base() const {
 
 ObjectUtils::ObjectUtils() :
     AulMemory(),
-    curr_ofi(efpip ? get_curr_proc(efpip) : create_object_filter_index(0, 0)),
+    curr_ofi(efpip ? get_curr_proc(efpip) : create_ofi(0, 0)),
     curr_object_idx(ExEdit::object(curr_ofi)),
     curr_filter_idx(ExEdit::filter(curr_ofi)),
     local_frame(efpip ? efpip->frame_num - efpip->objectp->frame_begin : 0) {

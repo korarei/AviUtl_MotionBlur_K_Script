@@ -2,8 +2,8 @@
 
 #include "aul_utils.hpp"
 #include "structs.hpp"
-#include "vector_2d.hpp"
 #include "utils.hpp"
+#include "vector_2d.hpp"
 
 #define ZOOM_MIN 1e-2f
 
@@ -19,20 +19,19 @@ enum class Coords : int {
 
 class Transform {
 public:
-    Transform(float x = 0.0f, float y = 0.0f, float zoom = 1.0f, float rz_deg = 0.0f, float cx = 0.0f, float cy = 0.0f);
-    Transform(const ObjectUtils &obj_utls, int offset_frame = 0, OffsetType offset_type = OffsetType::Current);
+    Transform(float x = 0.0f, float y = 0.0f, float zoom = 1.0f, float rz_deg = 0.0f, float cx = 0.0f, float cy = 0.0f) noexcept;
+    Transform(const ObjectUtils &obj_utls, int offset_frame = 0, OffsetType offset_type = OffsetType::Current) noexcept;
 
-    Transform operator+(const Transform &other) const;
-    Transform operator-(const Transform &other) const;
-    Transform operator*(const float &scalar) const;
+    [[nodiscard]] Transform operator+(const Transform &other) const noexcept;
+    [[nodiscard]] Transform operator-(const Transform &other) const noexcept;
+    [[nodiscard]] Transform operator*(float scalar) const noexcept;
 
     Vec2<float> get_location() const;
     float get_zoom() const;
     float get_rz(AngleUnit unit = AngleUnit::Rad) const;
     Vec2<float> get_center() const;
 
-    void apply_geometry();
-    void apply_geometry(const Geometry &geo);
+    void apply_geometry(const Geometry &geo) noexcept;
 
 private:
     float x, y, zoom, rz_deg, rz_rad, cx, cy;
@@ -48,7 +47,7 @@ public:
     float get_rz(AngleUnit unit = AngleUnit::Rad) const;
     bool get_is_moved() const;
 
-    int calc_required_samples(float blur_amount, const Vec2<int> &image_size, float scale) const;
+    int calc_required_samples(float blur_amount, const Vec2<int> &image_size, float factor) const;
     std::tuple<float, float, float> calc_relative_displacements(const Displacements &other) const;
     Steps calc_steps(float amount, int samples, float offset_angle_rad) const;
     Steps calc_steps(const std::array<float, 3> &amount, int samples, float offset_angle_rad) const;
@@ -71,17 +70,17 @@ private:
 
 // Overload the +, -, and * operators for Transform class.
 inline Transform
-Transform::operator+(const Transform &other) const {
+Transform::operator+(const Transform &other) const noexcept {
     return Transform(x + other.x, y + other.y, zoom + other.zoom, rz_deg + other.rz_deg, cx + other.cx, cy + other.cy);
 }
 
 inline Transform
-Transform::operator-(const Transform &other) const {
+Transform::operator-(const Transform &other) const noexcept {
     return Transform(x - other.x, y - other.y, zoom - other.zoom, rz_deg - other.rz_deg, cx - other.cx, cy - other.cy);
 }
 
 inline Transform
-Transform::operator*(const float &scalar) const {
+Transform::operator*(float scalar) const noexcept {
     return Transform(x * scalar, y * scalar, zoom * scalar, rz_deg * scalar, cx * scalar, cy * scalar);
 }
 
