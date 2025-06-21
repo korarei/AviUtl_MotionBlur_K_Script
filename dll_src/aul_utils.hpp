@@ -36,8 +36,8 @@ protected:
     int32_t camera_mode;
     bool is_saving;
 
-    using GetCurrentProcessing = ExEdit::ObjectFilterIndex(__cdecl *)(ExEdit::FilterProcInfo *);
-    GetCurrentProcessing get_curr_proc;
+    using get_current_processing_fn = ExEdit::ObjectFilterIndex(__cdecl *)(ExEdit::FilterProcInfo *);
+    get_current_processing_fn get_curr_proc;
 
 private:
     static constexpr uintptr_t VERSION_OFFSET = 0x4d726;
@@ -53,7 +53,7 @@ private:
     [[nodiscard]] ExEdit::Filter *get_exedit_filter_ptr(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] ExEdit::FilterProcInfo *get_exedit_filter_proc_info_ptr(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] ExEdit::Filter **get_loaded_filter_table(uintptr_t exedit_base) const noexcept;
-    [[nodiscard]] GetCurrentProcessing get_get_curr_proc(uintptr_t exedit_base) const noexcept;
+    [[nodiscard]] get_current_processing_fn get_get_curr_proc(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] int32_t get_camera_mode(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] int32_t get_is_saving(uintptr_t exedit_base) const noexcept;
 };
@@ -138,9 +138,9 @@ AulMemory::get_loaded_filter_table(uintptr_t exedit_base) const noexcept {
     return reinterpret_cast<ExEdit::Filter **>(exedit_base + LOADED_FILTER_TABLE_OFFSET);
 }
 
-inline AulMemory::GetCurrentProcessing
+inline AulMemory::get_current_processing_fn
 AulMemory::get_get_curr_proc(uintptr_t exedit_base) const noexcept {
-    return reinterpret_cast<GetCurrentProcessing>(exedit_base + GET_CURR_PROC_OFFSET);
+    return reinterpret_cast<get_current_processing_fn>(exedit_base + GET_CURR_PROC_OFFSET);
 }
 
 inline int32_t
