@@ -4,10 +4,10 @@
 
 // Transform class
 // Constructor
-Transform::Transform(float x, float y, float zoom, float rz_deg, float cx, float cy) :
+Transform::Transform(float x, float y, float zoom, float rz_deg, float cx, float cy) noexcept :
     x(x), y(y), zoom(std::max(zoom, ZOOM_MIN)), rz_deg(rz_deg), rz_rad(to_rad(rz_deg)), cx(cx), cy(cy) {}
 
-Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType offset_type) :
+Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType offset_type) noexcept :
     x(obj_utls.calc_track_val(TrackName::X, offset_frame, offset_type)),
     y(obj_utls.calc_track_val(TrackName::Y, offset_frame, offset_type)),
     zoom(std::max(obj_utls.calc_track_val(TrackName::Zoom, offset_frame, offset_type), ZOOM_MIN)),
@@ -17,12 +17,7 @@ Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType o
     cy(obj_utls.get_cy()) {}
 
 void
-Transform::apply_geometry() {
-    zoom = ZOOM_MIN;
-}
-
-void
-Transform::apply_geometry(const Geometry &geo) {
+Transform::apply_geometry(const Geometry &geo) noexcept {
     x += ObjectUtils::calc_ox(geo.ox);
     y += ObjectUtils::calc_oy(geo.oy);
     zoom = std::max(zoom * ObjectUtils::calc_zoom(geo.zoom), ZOOM_MIN);
@@ -48,12 +43,12 @@ Displacements::Displacements(const Transform &from, const Transform &to) :
 
 // Calculate the required_samples.
 int
-Displacements::calc_required_samples(float blur_amount, const Vec2<int> &image_size, float scale) const {
+Displacements::calc_required_samples(float blur_amount, const Vec2<int> &image_size, float factor) const {
     if (!is_moved)
         return 0;
 
     Vec2<float> abs_center(std::abs(center_from.get_x()), std::abs(center_from.get_y()));
-    Vec2<float> size = static_cast<Vec2<float>>(image_size) * scale + abs_center;
+    Vec2<float> size = static_cast<Vec2<float>>(image_size) * factor + abs_center;
     float radius = size.norm(2) * 0.5f;
 
     return std::max({static_cast<int>(std::ceil(std::abs(local_distance) * blur_amount)),

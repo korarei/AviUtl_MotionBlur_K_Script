@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <map>
@@ -26,8 +27,8 @@ public:
     void write(uint32_t key1, uint32_t key2, const T &val) {
         std::lock_guard<std::mutex> lock(mutex);
 
-        const size_t size = sizeof(T);
-        const size_t total_size = size << block_bits;
+        const std::size_t size = sizeof(T);
+        const std::size_t total_size = size << block_bits;
 
         uint32_t block_id, block_offset;
         calc_block_pos(key2, block_id, block_offset);
@@ -37,7 +38,8 @@ public:
         bool is_newly_created = false;
 
         if (old_handle == nullptr) {
-            new_handle = ::CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, total_size, nullptr); // 0 padding
+            new_handle = ::CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, total_size,
+                                             nullptr);  // 0 padding
             if (new_handle == nullptr)
                 return;
 
@@ -65,8 +67,8 @@ public:
     bool read(uint32_t key1, uint32_t key2, T &val) const {
         std::lock_guard<std::mutex> lock(mutex);
 
-        const size_t size = sizeof(T);
-        const size_t total_size = size << block_bits;
+        const std::size_t size = sizeof(T);
+        const std::size_t total_size = size << block_bits;
 
         uint32_t block_id, block_offset;
         calc_block_pos(key2, block_id, block_offset);
