@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <cmath>
 #include <concepts>
 #include <ostream>
@@ -46,7 +45,6 @@ public:
 
         T cos_t = std::cos(theta);
         T sin_t = std::sin(theta);
-
         return Vec2(scale * (get_x() * cos_t - get_y() * sin_t), scale * (get_x() * sin_t + get_y() * cos_t));
     }
 
@@ -99,13 +97,16 @@ public:
         return Mat2((*this)(1, 1), -(*this)(0, 1), -(*this)(1, 0), (*this)(0, 0)) * inv_det;
     }
 
+    // Create identity matrix.
+    [[nodiscard]] static constexpr Mat2 identity() { return Mat2(T{1}, T{0}, T{0}, T{1}); }
+
     // Create rotation matrix.
-    [[nodiscard]] static constexpr Mat2 rotation(T theta)
+    [[nodiscard]] static constexpr Mat2 rotation(T theta, T scale = T{1})
         requires std::floating_point<T>
     {
-        T cos_t = std::cos(theta);
-        T sin_t = std::sin(theta);
-        return Mat2(cos_t, -sin_t, sin_t, cos_t);
+        T c = std::cos(theta) * scale;
+        T s = std::sin(theta) * scale;
+        return Mat2(c, -s, s, c);
     }
 
 private:

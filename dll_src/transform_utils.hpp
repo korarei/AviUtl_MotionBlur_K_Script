@@ -1,9 +1,12 @@
 #pragma once
 
+#include <utility>
+
 #include "aul_utils.hpp"
 #include "structs.hpp"
 #include "utils.hpp"
 #include "vector_2d.hpp"
+#include "vector_3d.hpp"
 
 #define ZOOM_MIN 1e-2f
 
@@ -17,9 +20,12 @@ enum class Coords : int {
     Local
 };
 
-class Transform {
-public:
-    Transform(float x = 0.0f, float y = 0.0f, float zoom = 1.0f, float rz_deg = 0.0f, float cx = 0.0f, float cy = 0.0f) noexcept;
+struct Transform {
+    float x, y, zoom, rz_deg, rz_rad, cx, cy;
+
+    // Constructors.
+    Transform(float x = 0.0f, float y = 0.0f, float zoom = 1.0f, float rz_deg = 0.0f, float cx = 0.0f,
+              float cy = 0.0f) noexcept;
     Transform(const ObjectUtils &obj_utls, int offset_frame = 0, OffsetType offset_type = OffsetType::Current) noexcept;
 
     [[nodiscard]] Transform operator+(const Transform &other) const noexcept;
@@ -29,12 +35,39 @@ public:
     Vec2<float> get_location() const;
     float get_zoom() const;
     float get_rz(AngleUnit unit = AngleUnit::Rad) const;
-    Vec2<float> get_center() const;
+    [[nodiscard]] constexpr Vec2<float> get_pos() const noexcept { return Vec2<float>(x, y); }
+    [[nodiscard]] constexpr Vec2<float> get_center() const noexcept { return Vec2<float>(cx, cy); }
 
     void apply_geometry(const Geometry &geo) noexcept;
+};
+
+class Delta {
+public:
+    using htm_and_adj = std::pair<Mat3<float>, Mat3<float>>;
+
+    // Constructors.
+    Delta(const Transform &from, const Transform &to) noexcept;
+
+    // Getters.
+    [[nodiscard]] constexpr const bool &get_is_moved() const noexcept { return is_moved; }
+    [[nodiscard]] constexpr const Vec2<float> &get_center() const noexcept { return center_to; }
+
+    // Calculate the required samples.
+    [[nodiscard]] int calc_req_samp(float amt, const Vec2<int> &img_size, float img_scale) const noexcept;
+
+    // Calculate the HTM (Homogeneous Transformation Matrix).
+    // Out: 1. HTM, 2. Adjustment Matrix (Inverse of the orientation).
+    [[nodiscard]] htm_and_adj calc_htm(bool is_inv = false, int samp = 1, float amt = 1.0f) const noexcept;
+
+    // Calculate the bounding box size.
+    [[nodiscard]] Vec2<float> calc_bbox(const Vec2<int> &img_size, float amt = 1.0f,
+                                        float offset_rot = 0.0f) const noexcept;
 
 private:
-    float x, y, zoom, rz_deg, rz_rad, cx, cy;
+    float rel_rot, rel_scale;
+    Vec2<float> rel_pos, center_to, center_from;
+    float rel_dist;
+    bool is_moved;
 };
 
 class Displacements {
@@ -105,11 +138,6 @@ Transform::get_rz(AngleUnit unit) const {
         default:
             return 0.0f;  // Invalid unit, return 0.0f
     }
-}
-
-inline Vec2<float>
-Transform::get_center() const {
-    return Vec2<float>(cx, cy);
 }
 
 // Displacements Getters

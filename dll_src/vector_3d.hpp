@@ -1,10 +1,6 @@
 #pragma once
 
-#include <array>
-#include <stdexcept>
-
 #include "vector_2d.hpp"
-#include "vector_base.hpp"
 
 template <vec_base::arithmetic T>
 class Vec3 : public vec_base::VecBase<Vec3<T>, 3, T> {
@@ -34,7 +30,7 @@ public:
     // Setters.
     constexpr void set_x(T new_x) noexcept { this->data[0] = new_x; }
     constexpr void set_y(T new_y) noexcept { this->data[1] = new_y; }
-    constexpr void set_z(T new_z) noexcept { this->data[2] = new_y; }
+    constexpr void set_z(T new_z) noexcept { this->data[2] = new_z; }
 
 private:
     using super = vec_base::VecBase<Vec3<T>, 3, T>;
@@ -64,6 +60,30 @@ public:
     // Assignment operators.
     constexpr Mat3 &operator=(const Mat3 &other) noexcept = default;
     constexpr Mat3 &operator=(Mat3 &&other) noexcept = default;
+
+    // Create identity matrix.
+    [[nodiscard]] static constexpr Mat3 identity() {
+        return Mat3(T{1}, T{0}, T{0}, T{0}, T{1}, T{0}, T{0}, T{0}, T{1});
+    }
+
+    // Create rotation matrix.
+    [[nodiscard]] static constexpr Mat3 rotation(T theta, int axis = 2, T scale = T{1})
+        requires std::floating_point<T>
+    {
+        T c = std::cos(theta) * scale;
+        T s = std::sin(theta) * scale;
+
+        switch (axis) {
+            case 0:
+                return Mat3(T{1}, T{0}, T{0}, T{0}, c, -s, T{0}, s, c);
+            case 1:
+                return Mat3(c, T{0}, s, T{0}, T{1}, T{0}, -s, T{0}, c);
+            case 2:
+                return Mat3(c, -s, T{0}, s, c, T{0}, T{0}, T{0}, T{1});
+            default:
+                throw std::invalid_argument("Unsupported axis.");
+        }
+    }
 
 private:
     using super = vec_base::MatBase<Mat3<T>, Vec3<T>, 3, T>;

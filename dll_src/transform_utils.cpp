@@ -1,6 +1,7 @@
 #include "transform_utils.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 // Transform class
 // Constructor
@@ -23,6 +24,70 @@ Transform::apply_geometry(const Geometry &geo) noexcept {
     zoom = std::max(zoom * ObjectUtils::calc_zoom(geo.zoom), ZOOM_MIN);
     rz_deg = ObjectUtils::calc_rz(geo.rz, rz_deg);
     rz_rad = to_rad(rz_deg);
+}
+
+Delta::Delta(const Transform &from, const Transform &to) noexcept :
+    rel_rot(to.rz_rad - from.rz_rad),
+    rel_scale(std::max(to.zoom / from.zoom, ZOOM_MIN)),
+    rel_pos((to.get_pos() - from.get_pos()).rotate(-from.rz_rad, 100.0f / from.zoom)),
+    center_to(-to.get_center()),
+    center_from(-from.get_center()),
+    rel_dist(rel_pos.norm(2)),
+    is_moved(!is_zero(rel_dist) || !are_equal(rel_scale, 1.0f) || !is_zero(rel_rot)) {}
+
+int
+Delta::calc_req_samp(float amt, const Vec2<int> &img_size, float img_scale) const noexcept {
+    if (!is_moved)
+        return 0;
+
+    auto size = static_cast<Vec2<float>>(img_size) * img_scale + center_from.abs();
+    float r = size.norm(2) * 0.5f;
+
+    Vec3<float> req_samps(rel_dist, (rel_scale - 1.0f) * r, rel_rot * r);
+    req_samps *= amt;
+    return static_cast<int>(req_samps.norm(-1));
+}
+
+Delta::htm_and_adj
+Delta::calc_htm(bool is_inv, int samp, float amt) const noexcept {
+    float step_amt = amt / static_cast<float>(samp);
+    float step_rot = rel_rot * step_amt;
+    float step_scale = samp == 1 ? rel_scale * amt : std::pow(rel_scale * amt, 1.0f / static_cast<float>(samp));
+    auto step_pos = rel_pos * step_amt;
+    auto adj = Mat3<float>::identity();
+
+    if (is_inv) {
+        auto inv_ori = Mat2<float>::rotation(-step_rot, 1.0f / step_scale);
+        auto inv_step_pos = -(inv_ori * step_pos);
+        auto trans = Vec3<float>(inv_step_pos, 1.0f);
+        auto htm = Mat3<float>(inv_ori, trans);
+
+        if (samp > 1)
+            adj = Mat3<float>::rotation(step_rot, 2, step_scale);
+
+        return {htm, adj};
+    } else {
+        auto ori = Mat2<float>::rotation(step_rot, step_scale);
+        auto trans = Vec3<float>(step_pos, 1.0f);
+        auto htm = Mat3<float>(ori, trans);
+
+        if (samp > 1)
+            adj = Mat3<float>::rotation(-step_rot, 2, 1.0f / step_scale);
+
+        return {htm, adj};
+    }
+}
+
+Vec2<float>
+Delta::calc_bbox(const Vec2<int> &img_size, float amt, float offset_rot) const noexcept {
+    if (is_zero(amt) && is_zero(offset_rot)) {
+        return static_cast<Vec2<float>>(img_size);
+    } else {
+        float theta = rel_rot * amt - offset_rot;
+        auto rot_mat = Mat2<float>::rotation(theta);
+        Vec2<float> size = static_cast<Vec2<float>>(img_size) * rel_scale * amt;
+        return rot_mat.abs() * size;
+    }
 }
 
 // Displacements class

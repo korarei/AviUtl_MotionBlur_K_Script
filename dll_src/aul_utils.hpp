@@ -24,20 +24,20 @@ enum class OffsetType : int {
 
 class AulMemory {
 public:
+    // Constructors.
     AulMemory();
-
     AulMemory(const AulMemory &) = delete;
     AulMemory &operator=(const AulMemory &) = delete;
 
 protected:
+    using get_curr_proc_fn = ExEdit::ObjectFilterIndex(__cdecl *)(ExEdit::FilterProcInfo *);
+
     ExEdit::Filter *efp;
     ExEdit::FilterProcInfo *efpip;
     ExEdit::Filter **loaded_filter_table;
     int32_t camera_mode;
     bool is_saving;
-
-    using get_current_processing_fn = ExEdit::ObjectFilterIndex(__cdecl *)(ExEdit::FilterProcInfo *);
-    get_current_processing_fn get_curr_proc;
+    get_curr_proc_fn get_curr_proc;
 
 private:
     static constexpr uintptr_t VERSION_OFFSET = 0x4d726;
@@ -53,38 +53,40 @@ private:
     [[nodiscard]] ExEdit::Filter *get_exedit_filter_ptr(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] ExEdit::FilterProcInfo *get_exedit_filter_proc_info_ptr(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] ExEdit::Filter **get_loaded_filter_table(uintptr_t exedit_base) const noexcept;
-    [[nodiscard]] get_current_processing_fn get_get_curr_proc(uintptr_t exedit_base) const noexcept;
+    [[nodiscard]] get_curr_proc_fn get_get_curr_proc(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] int32_t get_camera_mode(uintptr_t exedit_base) const noexcept;
     [[nodiscard]] int32_t get_is_saving(uintptr_t exedit_base) const noexcept;
 };
 
 class ObjectUtils : public AulMemory {
 public:
-    ObjectUtils();
+    using geo = ExEdit::FilterProcInfo::Geometry;
+    using obj_filter_idx = ExEdit::ObjectFilterIndex;
 
+    // Constructors.
+    ObjectUtils();
     ObjectUtils(const ObjectUtils &) = delete;
     ObjectUtils &operator=(const ObjectUtils &) = delete;
 
-    [[nodiscard]] constexpr int32_t get_frame_begin() const noexcept;
-    [[nodiscard]] constexpr int32_t get_frame_end() const noexcept;
-    [[nodiscard]] constexpr int32_t get_frame_num() const noexcept;
-    [[nodiscard]] constexpr int32_t get_local_frame() const noexcept;
-    [[nodiscard]] constexpr int32_t get_obj_w() const noexcept;
-    [[nodiscard]] constexpr int32_t get_obj_h() const noexcept;
-    [[nodiscard]] constexpr const ExEdit::FilterProcInfo::Geometry &get_obj_data() const noexcept;
-    [[nodiscard]] constexpr bool get_is_saving() const noexcept;
-    [[nodiscard]] constexpr uint16_t get_curr_object_idx() const noexcept;
-    [[nodiscard]] constexpr int32_t get_obj_index() const noexcept;
-    [[nodiscard]] constexpr int32_t get_obj_num() const noexcept;
-    [[nodiscard]] constexpr int32_t get_camera_mode() const noexcept;
-    [[nodiscard]] constexpr int32_t get_max_w() const noexcept;
-    [[nodiscard]] constexpr int32_t get_max_h() const noexcept;
+    [[nodiscard]] constexpr int32_t get_frame_begin() const noexcept { return efpip->objectp->frame_begin; }
+    [[nodiscard]] constexpr int32_t get_frame_end() const noexcept { return efpip->objectp->frame_end; }
+    [[nodiscard]] constexpr int32_t get_frame_num() const noexcept { return efpip->frame_num; }
+    [[nodiscard]] constexpr int32_t get_local_frame() const noexcept { return local_frame; }
+    [[nodiscard]] constexpr int32_t get_obj_w() const noexcept { return efpip->obj_w; }
+    [[nodiscard]] constexpr int32_t get_obj_h() const noexcept { return efpip->obj_h; }
+    [[nodiscard]] constexpr const geo &get_obj_data() const noexcept { return efpip->obj_data; }
+    [[nodiscard]] constexpr bool get_is_saving() const noexcept { return is_saving; }
+    [[nodiscard]] constexpr uint16_t get_curr_object_idx() const noexcept { return curr_object_idx; }
+    [[nodiscard]] constexpr int32_t get_obj_index() const noexcept { return efpip->obj_index; }
+    [[nodiscard]] constexpr int32_t get_obj_num() const noexcept { return efpip->obj_num; }
+    [[nodiscard]] constexpr int32_t get_camera_mode() const noexcept { return camera_mode; }
+    [[nodiscard]] constexpr int32_t get_max_w() const noexcept { return max_w; }
+    [[nodiscard]] constexpr int32_t get_max_h() const noexcept { return max_h; }
 
-    constexpr void set_obj_w(int32_t w) noexcept;
-    constexpr void set_obj_h(int32_t h) noexcept;
+    constexpr void set_obj_w(int32_t w) noexcept { efpip->obj_w = std::clamp(w, 0, max_w); }
+    constexpr void set_obj_h(int32_t h) noexcept { efpip->obj_h = std::clamp(h, 0, max_h); }
 
-    [[nodiscard]] static constexpr ExEdit::ObjectFilterIndex create_ofi(uint16_t object_idx,
-                                                                        uint16_t filter_idx) noexcept;
+    [[nodiscard]] static constexpr obj_filter_idx create_ofi(uint16_t object_idx, uint16_t filter_idx) noexcept;
     [[nodiscard]] static constexpr float calc_ox(int32_t ox) noexcept;
     [[nodiscard]] static constexpr float calc_oy(int32_t oy) noexcept;
     [[nodiscard]] static constexpr float calc_zoom(int32_t zoom) noexcept;
@@ -102,7 +104,7 @@ public:
                                        OffsetType offset_type = OffsetType::Current) const;
 
 private:
-    ExEdit::ObjectFilterIndex curr_ofi;
+    obj_filter_idx curr_ofi;
     uint16_t curr_object_idx;
     uint16_t curr_filter_idx;
     int32_t local_frame;
@@ -138,9 +140,9 @@ AulMemory::get_loaded_filter_table(uintptr_t exedit_base) const noexcept {
     return reinterpret_cast<ExEdit::Filter **>(exedit_base + LOADED_FILTER_TABLE_OFFSET);
 }
 
-inline AulMemory::get_current_processing_fn
+inline AulMemory::get_curr_proc_fn
 AulMemory::get_get_curr_proc(uintptr_t exedit_base) const noexcept {
-    return reinterpret_cast<get_current_processing_fn>(exedit_base + GET_CURR_PROC_OFFSET);
+    return reinterpret_cast<get_curr_proc_fn>(exedit_base + GET_CURR_PROC_OFFSET);
 }
 
 inline int32_t
@@ -154,85 +156,12 @@ AulMemory::get_is_saving(uintptr_t exedit_base) const noexcept {
 }
 
 // Functions of Object Utilities class.
-inline constexpr int32_t
-ObjectUtils::get_frame_begin() const noexcept {
-    return efpip->objectp->frame_begin;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_frame_end() const noexcept {
-    return efpip->objectp->frame_end;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_frame_num() const noexcept {
-    return efpip->frame_num;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_local_frame() const noexcept {
-    return local_frame;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_obj_w() const noexcept {
-    return efpip->obj_w;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_obj_h() const noexcept {
-    return efpip->obj_h;
-}
-
-inline constexpr const ExEdit::FilterProcInfo::Geometry &
-ObjectUtils::get_obj_data() const noexcept {
-    return efpip->obj_data;
-}
-
-inline constexpr bool
-ObjectUtils::get_is_saving() const noexcept {
-    return is_saving;
-}
-
-inline constexpr uint16_t
-ObjectUtils::get_curr_object_idx() const noexcept {
-    return curr_object_idx;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_obj_index() const noexcept {
-    return efpip->obj_index;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_obj_num() const noexcept {
-    return efpip->obj_num;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_camera_mode() const noexcept {
-    return camera_mode;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_max_w() const noexcept {
-    return max_w;
-}
-
-inline constexpr int32_t
-ObjectUtils::get_max_h() const noexcept {
-    return max_h;
-}
-
-// Object Utilities Setters.
-inline constexpr void
-ObjectUtils::set_obj_w(int32_t w) noexcept {
-    efpip->obj_w = std::clamp(w, 0, max_w);
-}
-
-inline constexpr void
-ObjectUtils::set_obj_h(int32_t h) noexcept {
-    efpip->obj_h = std::clamp(h, 0, max_h);
+// Create an object filter index from object index and filter index.
+inline constexpr ObjectUtils::obj_filter_idx
+ObjectUtils::create_ofi(uint16_t object_idx, uint16_t filter_idx) noexcept {
+    const auto filter_part = static_cast<uint32_t>(filter_idx) << 16;
+    const auto object_part = static_cast<uint32_t>(object_idx);
+    return static_cast<obj_filter_idx>(filter_part | object_part);
 }
 
 // calculate the geometry.
@@ -265,7 +194,7 @@ ObjectUtils::calc_cy(int32_t cy, float base_cy) noexcept {
 
 inline float
 ObjectUtils::calc_rz(int32_t rz, float base_angle) noexcept {
-    return std::fmod(base_angle, 360.0f) + static_cast<float>((static_cast<int64_t>(rz) * 360 * 1000) >> 16) * 1e-3f;
+    return std::fmodf(base_angle, 360.0f) + static_cast<float>((static_cast<int64_t>(rz) * 360 * 1000) >> 16) * 1e-3f;
 }
 
 inline float
@@ -284,12 +213,4 @@ inline float
 ObjectUtils::get_rz(std::optional<int32_t> rz, int32_t offset_frame, OffsetType offset_type) const noexcept {
     float base_angle = calc_track_val(TrackName::RotationZ, offset_frame, offset_type);
     return calc_rz(rz.value_or(efpip->obj_data.rz), base_angle);
-}
-
-// Create an object filter index from object index and filter index.
-inline constexpr ExEdit::ObjectFilterIndex
-ObjectUtils::create_ofi(uint16_t object_idx, uint16_t filter_idx) noexcept {
-    const auto filter_part = static_cast<std::uint32_t>(filter_idx) << 16;
-    const auto object_part = static_cast<std::uint32_t>(object_idx);
-    return static_cast<ExEdit::ObjectFilterIndex>(filter_part | object_part);
 }

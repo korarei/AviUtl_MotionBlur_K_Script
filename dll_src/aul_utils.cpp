@@ -66,10 +66,8 @@ ObjectUtils::ObjectUtils() :
     efp->aviutl_exfunc->get_sys_info(nullptr, &sys_info);
     max_w = sys_info.max_w;
     max_h = sys_info.max_h;
-
-    if (sys_info.build != 11003) {
+    if (sys_info.build != 11003)
         throw std::runtime_error("AviUtl v1.10 is required.");
-    }
 }
 
 float

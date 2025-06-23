@@ -364,8 +364,19 @@ public:
     // Transpose the matrix.
     [[nodiscard]] constexpr Derived transpose() const noexcept {
         Derived result;
-        for (std::size_t j = 0; j < N; ++j)
-            for (std::size_t i = 0; i < N; ++i) result(j, i) = (*this)(i, j);
+        for (std::size_t j = 0; j < N; ++j) {
+            for (std::size_t i = 0; i < N; ++i) {
+                result(j, i) = (*this)(i, j);
+            }
+        }
+        return result;
+    }
+
+    [[nodiscard]] constexpr Derived abs() const noexcept {
+        Derived result;
+        for (std::size_t i = 0; i < N; ++i) {
+            result[i] = cols[i].abs();
+        }
         return result;
     }
 
