@@ -10,6 +10,7 @@
 
 #include "structs.hpp"
 #include "vector_2d.hpp"
+#include "vector_3d.hpp"
 
 struct ObjectMotionBlurParams {
     const float shutter_angle;
@@ -46,6 +47,7 @@ public:
     void setFloat(std::string name, const std::vector<float> &vec) const;
     void setInt(std::string name, const std::vector<int> &vec) const;
     void setMatrix(std::string name, std::string type, bool transpose, float angle_rad) const;
+    void setMat3(const char *name, bool transpose, const Mat3<float> &mat3) const;
     void draw(std::string mode, Image &img) const;
 
     void setParamsForOMBStep(const std::string &name, const Steps &steps) const;  // OMBStep: Object Motion Blur Step

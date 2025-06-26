@@ -175,9 +175,11 @@ resize_image(const Vec2<int> &img_size, const Vec2<float> &center, const Segment
 // Rendering.
 static void
 render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, const SegmentData<Steps> &steps_data,
-                          const SegmentData<int> &samp_data) {
-    std::filesystem::path shader_path = get_self_dir() / params.shader_dir.relative_path() / "MotionBlur_K.frag";
-    if (!std::filesystem::exists(shader_path))
+                          const SegmentData<int> &samp_data, const SegmentData<Delta::Mapping> &mapping_data) {
+    namespace fs = std::filesystem;
+
+    fs::path shader_path = get_self_dir() / params.shader_dir.relative_path() / "MotionBlur_K.frag";
+    if (!fs::exists(shader_path) || !fs::is_regular_file(shader_path))
         throw std::runtime_error("Shader file not found: " + shader_path.string());
 
     GLShaderKit gl_shader_kit(L);
@@ -195,13 +197,16 @@ render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, co
     Vec2<float> pivot = img.center + resolution * 0.5f;
     gl_shader_kit.setFloat("resolution", {resolution.get_x(), resolution.get_y()});
     gl_shader_kit.setFloat("pivot", {pivot.get_x(), pivot.get_y()});
-    gl_shader_kit.setInt("is_orig_img_visible", {params.mix_orig_img});
-    gl_shader_kit.setInt("samples", {*samp_data.seg1, samp_data.seg2 ? *samp_data.seg2 : 0});
+    gl_shader_kit.setInt("mix_orig_img", {params.mix_orig_img});
+    gl_shader_kit.setInt("samp", {*samp_data.seg1, samp_data.seg2 ? *samp_data.seg2 : 0});
 
     gl_shader_kit.setParamsForOMBStep("offset", *steps_data.offset);
-    gl_shader_kit.setParamsForOMBStep("seg1", *steps_data.seg1);
-    if (steps_data.seg2)
-        gl_shader_kit.setParamsForOMBStep("seg2", *steps_data.seg2);
+    gl_shader_kit.setMat3("htm_init_seg1", false, mapping_data.seg1->htm);
+    gl_shader_kit.setMat3("adj_seg1", false, mapping_data.seg1->adj);
+    if (steps_data.seg2) {
+        gl_shader_kit.setMat3("htm_init_seg2", false, mapping_data.seg2->htm);
+        gl_shader_kit.setMat3("adj_seg2", false, mapping_data.seg2->adj);
+    }
 
     gl_shader_kit.draw("TRIANGLE_STRIP", img);
     gl_shader_kit.deactivate();
@@ -294,12 +299,12 @@ process_object_motion_blur(lua_State *L) {
             shared_mem->write(shared_mem_key, local_frame, geo_curr_f);
 
         // Invalid value.
-        if (are_equal(params.shutter_angle, 0.0f)) {
+        if (is_zero(params.shutter_angle)) {
             update_geo();
             return 0;
         }
 
-        if (are_equal(obj_utils.calc_track_val(TrackName::Zoom), 0.0f)) {
+        if (is_zero(obj_utils.calc_track_val(TrackName::Zoom))) {
             update_geo();
             return 0;
         }
@@ -312,10 +317,12 @@ process_object_motion_blur(lua_State *L) {
         bool should_calc_prev_2f = params.shutter_angle > 360.0f && (params.calc_neg_f || local_frame >= 2);
 
         SegmentData<Displacements> disp_data;
+        SegmentData<Delta> delta_data;
         SegmentData<float> blur_amt_data;
         SegmentData<int> req_samp_data, samp_data;
         SegmentData<Steps> steps_data;
-        Vec2<int> image_size(obj_utils.get_obj_w(), obj_utils.get_obj_h());
+        SegmentData<Delta::Mapping> mapping_data;
+        Vec2<float> img_size(static_cast<float>(obj_utils.get_obj_w()), static_cast<float>(obj_utils.get_obj_h()));
         Vec2<float> center(obj_utils.get_cx(), obj_utils.get_cy());
 
         // calculate the displacements.
@@ -338,16 +345,20 @@ process_object_motion_blur(lua_State *L) {
                         [&](auto &&tf) {
                             if constexpr (std::is_same_v<std::decay_t<decltype(tf)>, Transform>) {
                                 disp_data.seg1 = Displacements(tf_array[0], tf);
+                                delta_data.seg1 = Delta(tf_array[0], tf);
                             } else {
                                 auto &[neg_1f, neg_2f] = tf;
                                 disp_data.seg1 = Displacements(tf_array[0], neg_1f);
                                 disp_data.seg2 = Displacements(neg_1f, neg_2f);
+                                delta_data.seg1 = Delta(tf_array[0], neg_1f);
+                                delta_data.seg2 = Delta(neg_1f, neg_2f);
                             }
                         },
                         tf_neg_f);
             } else {
                 if (!should_calc_prev_2f) {
                     disp_data.seg1 = Displacements(tf_array[1], tf_array[0]);
+                    delta_data.seg1 = Delta(tf_array[1], tf_array[0]);
                 } else {
                     auto tf_neg_f = calc_neg_frame(tf_array);
                     std::visit(
@@ -355,6 +366,8 @@ process_object_motion_blur(lua_State *L) {
                                 if constexpr (std::is_same_v<std::decay_t<decltype(tf)>, Transform>) {
                                     disp_data.seg1 = Displacements(tf_array[1], tf_array[0]);
                                     disp_data.seg2 = Displacements(tf_array[0], tf);
+                                    delta_data.seg1 = Delta(tf_array[1], tf_array[0]);
+                                    delta_data.seg2 = Delta(tf_array[0], tf);
                                 } else {
                                     throw std::runtime_error("Unexpected variant type in tf_neg_f.");
                                 }
@@ -372,6 +385,7 @@ process_object_motion_blur(lua_State *L) {
             }
 
             disp_data.seg1 = Displacements(tf_curr_f, tf_prev_1f);
+            delta_data.seg1 = Delta(tf_curr_f, tf_prev_1f);
 
             if (should_calc_prev_2f) {
                 Transform tf_prev_2f = Transform(obj_utils, -2);
@@ -381,6 +395,7 @@ process_object_motion_blur(lua_State *L) {
                 }
 
                 disp_data.seg2 = Displacements(tf_prev_1f, tf_prev_2f);
+                delta_data.seg2 = Delta(tf_prev_1f, tf_prev_2f);
             }
         }
 
@@ -388,21 +403,20 @@ process_object_motion_blur(lua_State *L) {
         update_geo();
 
         // Invalid value.
-        if (!disp_data.seg1)
+        if (!delta_data.seg1)
             return 0;
 
-        bool can_render_prev_2f = disp_data.seg2 && disp_data.seg2->get_is_moved();  // Render to 2 frames ago.
-        float scale_factor_seg1 = disp_data.seg1->calc_relative_scale();
+        bool can_render_prev_2f = delta_data.seg2 && delta_data.seg2->get_is_moved();  // Render to 2 frames ago.
 
         // Calculate the required samples.
         blur_amt_data.seg1 = calc_blur_amt(params.shutter_angle);
-        req_samp_data.seg1 = disp_data.seg1->calc_required_samples(*blur_amt_data.seg1, image_size, 1.0f);
+        req_samp_data.seg1 = delta_data.seg1->calc_req_samp(*blur_amt_data.seg1, img_size);
         int total_req_samp = *req_samp_data.seg1;
 
         if (can_render_prev_2f) {
             blur_amt_data.seg2 = calc_blur_amt(params.shutter_angle, true);
             req_samp_data.seg2 =
-                    disp_data.seg2->calc_required_samples(*blur_amt_data.seg2, image_size, scale_factor_seg1);
+                    delta_data.seg2->calc_req_samp(*blur_amt_data.seg2, img_size, delta_data.seg1->get_scale());
             total_req_samp = *req_samp_data.seg1 + *req_samp_data.seg2;
         }
 
@@ -416,20 +430,22 @@ process_object_motion_blur(lua_State *L) {
 
         samp_data.seg1 = calc_samp(*req_samp_data.seg1, params.samp_lim - 1, total_req_samp);
         steps_data.seg1 = disp_data.seg1->calc_steps(*blur_amt_data.seg1, *samp_data.seg1, steps_data.offset->rz_rad);
+        mapping_data.seg1 = delta_data.seg1->calc_mapping(true, *blur_amt_data.seg1, *samp_data.seg1);
 
         if (can_render_prev_2f) {
             samp_data.seg2 = calc_samp(*req_samp_data.seg2, params.samp_lim - 1, total_req_samp);
             steps_data.seg2 =
                     disp_data.seg2->calc_steps(*blur_amt_data.seg2, *samp_data.seg2, steps_data.offset->rz_rad);
+            mapping_data.seg2 = delta_data.seg2->calc_mapping(true, *blur_amt_data.seg2, *samp_data.seg2);
         }
 
         // Resize.
         if (!params.keep_size)
-            resize_image(image_size, center, disp_data, blur_amt_data, *steps_data.offset, scale_factor_seg1,
-                         Vec2<int>(obj_utils.get_max_w(), obj_utils.get_max_h()), L);
+            resize_image(static_cast<Vec2<int>>(img_size), center, disp_data, blur_amt_data, *steps_data.offset,
+                         delta_data.seg1->get_scale(), Vec2<int>(obj_utils.get_max_w(), obj_utils.get_max_h()), L);
 
         // Rendering.
-        render_object_motion_blur(L, params, steps_data, samp_data);
+        render_object_motion_blur(L, params, steps_data, samp_data, mapping_data);
 
         // Print information.params.is_printing_info_enabled
         if (params.print_info) {

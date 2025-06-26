@@ -8,12 +8,12 @@
 #include "vector_base.hpp"
 
 // Define a 2D vector class template.
-template <vec_base::arithmetic T>
+template <vec_base::Arithmetic T>
 class Vec2 : public vec_base::VecBase<Vec2<T>, 2, T> {
 public:
     // Constructors.
-    constexpr Vec2() noexcept : super() {}
-    constexpr Vec2(T x, T y) noexcept : super(x, y) {}
+    constexpr Vec2() noexcept : Super() {}
+    constexpr Vec2(T x, T y) noexcept : Super(x, y) {}
     constexpr Vec2(const Vec2 &other) noexcept = default;
     constexpr Vec2(Vec2 &&other) noexcept = default;
 
@@ -22,7 +22,7 @@ public:
     constexpr Vec2 &operator=(Vec2 &&other) noexcept = default;
 
     // Type conversion operator.
-    template <vec_base::arithmetic U>
+    template <vec_base::Arithmetic U>
     [[nodiscard]] explicit constexpr operator Vec2<U>() const noexcept {
         return Vec2<U>(static_cast<U>(get_x()), static_cast<U>(get_y()));
     }
@@ -49,18 +49,18 @@ public:
     }
 
 private:
-    using super = vec_base::VecBase<Vec2<T>, 2, T>;
+    using Super = vec_base::VecBase<Vec2<T>, 2, T>;
 };
 
 // Overload the multiplication operator for scalar multiplication.
-template <vec_base::arithmetic T>
+template <vec_base::Arithmetic T>
 [[nodiscard]] constexpr Vec2<T>
 operator*(T scalar, const Vec2<T> &vec) noexcept {
     return vec * scalar;
 }
 
 // Overload the output stream operator for Vec2.
-template <vec_base::arithmetic T>
+template <vec_base::Arithmetic T>
 std::ostream &
 operator<<(std::ostream &os, const Vec2<T> &vec) {
     os << "Vec2(" << vec.get_x() << ", " << vec.get_y() << ")";
@@ -68,13 +68,13 @@ operator<<(std::ostream &os, const Vec2<T> &vec) {
 }
 
 // Define a 2x2 matrix class using Vec2.
-template <vec_base::arithmetic T>
+template <vec_base::Arithmetic T>
 class Mat2 : public vec_base::MatBase<Mat2<T>, Vec2<T>, 2, T> {
 public:
     // Constructors.
-    constexpr Mat2() noexcept : super() {}
-    constexpr Mat2(const Vec2<T> &c0, const Vec2<T> &c1) noexcept : super(c0, c1) {}
-    constexpr Mat2(T a11, T a12, T a21, T a22) noexcept : super(Vec2<T>(a11, a21), Vec2<T>(a12, a22)) {}
+    constexpr Mat2() noexcept : Super() {}
+    constexpr Mat2(const Vec2<T> &c0, const Vec2<T> &c1) noexcept : Super(c0, c1) {}
+    constexpr Mat2(T a11, T a12, T a21, T a22) noexcept : Super(Vec2<T>(a11, a21), Vec2<T>(a12, a22)) {}
     constexpr Mat2(const Mat2 &other) noexcept = default;
     constexpr Mat2(Mat2 &&other) noexcept = default;
 
@@ -110,11 +110,11 @@ public:
     }
 
 private:
-    using super = vec_base::MatBase<Mat2<T>, Vec2<T>, 2, T>;
+    using Super = vec_base::MatBase<Mat2<T>, Vec2<T>, 2, T>;
 };
 
 // Overload the multiplication operator for scalar multiplication of Mat2.
-template <vec_base::arithmetic T>
+template <vec_base::Arithmetic T>
 [[nodiscard]] constexpr Mat2<T>
 operator*(T scalar, const Mat2<T> &m) noexcept {
     return m * scalar;

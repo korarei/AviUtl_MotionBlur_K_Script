@@ -7,7 +7,7 @@
 #include "aul_utils.hpp"
 
 AulMemory::AulMemory() : efp(nullptr), efpip(nullptr), loaded_filter_table(nullptr), camera_mode(-1), is_saving(false) {
-    static uintptr_t exedit_base = get_exedit_base();
+    static std::uintptr_t exedit_base = get_exedit_base();
 
     efp = get_exedit_filter_ptr(exedit_base);
     if (!efp)
@@ -29,14 +29,14 @@ AulMemory::AulMemory() : efp(nullptr), efpip(nullptr), loaded_filter_table(nullp
     if (camera_mode < 0)
         throw std::runtime_error("Failed to retrieve camera mode.");
 
-    int32_t raw_saving_flag = get_is_saving(exedit_base);
+    std::int32_t raw_saving_flag = get_is_saving(exedit_base);
     if ((raw_saving_flag & ~1) != 0)
         throw std::runtime_error("Failed to retrieve is saving status.");
 
     is_saving = (raw_saving_flag & 1) != 0;
 }
 
-uintptr_t
+std::uintptr_t
 AulMemory::get_exedit_base() const {
     static HMODULE handle = []() -> HMODULE {
         HMODULE h = ::GetModuleHandle(_T("exedit.auf"));
@@ -45,9 +45,9 @@ AulMemory::get_exedit_base() const {
         return h;
     }();
 
-    uintptr_t base = reinterpret_cast<uintptr_t>(handle);
+    std::uintptr_t base = reinterpret_cast<std::uintptr_t>(handle);
 
-    static uintptr_t exedit_base = [base, this]() -> uintptr_t {
+    static std::uintptr_t exedit_base = [base, this]() -> std::uintptr_t {
         if (!check_exedit_version(base))
             throw std::runtime_error("ExEdit (exedit.auf) v0.92 is required.");
         return base;
@@ -71,7 +71,7 @@ ObjectUtils::ObjectUtils() :
 }
 
 float
-ObjectUtils::calc_track_val(TrackName track_name, int32_t offset_frame, OffsetType offset_type) const {
+ObjectUtils::calc_track_val(TrackName track_name, std::int32_t offset_frame, OffsetType offset_type) const {
     if (!ExEdit::is_valid(curr_ofi))
         return 0.0f;
 
@@ -79,12 +79,12 @@ ObjectUtils::calc_track_val(TrackName track_name, int32_t offset_frame, OffsetTy
     if (!curr_proc_efp->track_gui)
         return 0.0f;
 
-    int32_t val;
-    int32_t frame = offset_type == OffsetType::Current
-                          ? std::clamp(efpip->frame_num + offset_frame, efpip->objectp->frame_begin,
-                                       efpip->objectp->frame_end)
-                          : std::clamp(efpip->objectp->frame_begin + offset_frame, efpip->objectp->frame_begin,
-                                       efpip->objectp->frame_end);
+    std::int32_t val;
+    std::int32_t frame = offset_type == OffsetType::Current
+                               ? std::clamp(efpip->frame_num + offset_frame, efpip->objectp->frame_begin,
+                                            efpip->objectp->frame_end)
+                               : std::clamp(efpip->objectp->frame_begin + offset_frame, efpip->objectp->frame_begin,
+                                            efpip->objectp->frame_end);
     int track_idx = -1;
     float track_denom = 1e-1f;
 

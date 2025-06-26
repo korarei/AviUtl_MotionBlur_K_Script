@@ -148,6 +148,36 @@ GLShaderKit::setMatrix(std::string name, std::string type, bool transpose, float
     lua_call(L, 4, 0);
 }
 
+void GLShaderKit::setMat3(const char *name, bool transpose, const Mat3<float> &mat3) const {
+    lua_getfield(L, -1, "setMatrix");
+    lua_pushstring(L, name);
+    lua_pushstring(L, "3x3");
+    lua_pushboolean(L, transpose);
+
+    lua_newtable(L);
+
+    lua_pushnumber(L, mat3(0, 0));
+    lua_rawseti(L, -2, 1);
+    lua_pushnumber(L, mat3(0, 1));
+    lua_rawseti(L, -2, 2);
+    lua_pushnumber(L, mat3(0, 2));
+    lua_rawseti(L, -2, 3);
+    lua_pushnumber(L, mat3(1, 0));
+    lua_rawseti(L, -2, 4);
+    lua_pushnumber(L, mat3(1, 1));
+    lua_rawseti(L, -2, 5);
+    lua_pushnumber(L, mat3(1, 2));
+    lua_rawseti(L, -2, 6);
+    lua_pushnumber(L, mat3(2, 0));
+    lua_rawseti(L, -2, 7);
+    lua_pushnumber(L, mat3(2, 1));
+    lua_rawseti(L, -2, 8);
+    lua_pushnumber(L, mat3(2, 2));
+    lua_rawseti(L, -2, 9);
+
+    lua_call(L, 4, 0);
+}
+
 void
 GLShaderKit::draw(std::string mode, Image &img) const {
     lua_getfield(L, -1, "draw");

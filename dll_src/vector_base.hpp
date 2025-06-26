@@ -11,15 +11,15 @@
 
 namespace vec_base {
 template <typename T>
-concept arithmetic = std::integral<T> || std::floating_point<T>;
+concept Arithmetic = std::integral<T> || std::floating_point<T>;
 
 // Vector class.
-template <typename Derived, std::size_t N, arithmetic T>
+template <typename Derived, std::size_t N, Arithmetic T>
     requires(N > 0)
 class VecBase {
 public:
-    using iterator = typename std::array<T, N>::iterator;
-    using const_iterator = typename std::array<T, N>::const_iterator;
+    using Iterator = typename std::array<T, N>::iterator;
+    using ConstIterator = typename std::array<T, N>::const_iterator;
 
     // Constructors.
     constexpr VecBase() = default;
@@ -33,12 +33,12 @@ public:
     [[nodiscard]] constexpr const T &operator[](std::size_t i) const noexcept { return data[i]; }
 
     // Iterator support.
-    [[nodiscard]] constexpr iterator begin() noexcept { return data.begin(); }
-    [[nodiscard]] constexpr const_iterator begin() const noexcept { return data.begin(); }
-    [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return data.cbegin(); }
-    [[nodiscard]] constexpr iterator end() noexcept { return data.end(); }
-    [[nodiscard]] constexpr const_iterator end() const noexcept { return data.end(); }
-    [[nodiscard]] constexpr const_iterator cend() const noexcept { return data.cend(); }
+    [[nodiscard]] constexpr Iterator begin() noexcept { return data.begin(); }
+    [[nodiscard]] constexpr ConstIterator begin() const noexcept { return data.begin(); }
+    [[nodiscard]] constexpr ConstIterator cbegin() const noexcept { return data.cbegin(); }
+    [[nodiscard]] constexpr Iterator end() noexcept { return data.end(); }
+    [[nodiscard]] constexpr ConstIterator end() const noexcept { return data.end(); }
+    [[nodiscard]] constexpr ConstIterator cend() const noexcept { return data.cend(); }
 
     // Size and capacity.
     [[nodiscard]] static constexpr std::size_t size() noexcept { return N; }
@@ -176,9 +176,6 @@ public:
         return result;
     }
 
-    // Data access.
-    [[nodiscard]] constexpr const std::array<T, N> &raw_data() const noexcept { return data; }
-
     // Helper functions.
     [[nodiscard]] static constexpr bool is_zero(const T &val) noexcept {
         if constexpr (std::is_floating_point_v<T>) {
@@ -222,7 +219,7 @@ protected:
 };
 
 // Square matrix class.
-template <typename Derived, typename VecType, std::size_t N, arithmetic T>
+template <typename Derived, typename VecType, std::size_t N, Arithmetic T>
     requires(N > 0) && (VecType::size() == N)
 class MatBase {
 public:

@@ -36,25 +36,28 @@ Delta::Delta(const Transform &from, const Transform &to) noexcept :
     is_moved(!is_zero(rel_dist) || !are_equal(rel_scale, 1.0f) || !is_zero(rel_rot)) {}
 
 int
-Delta::calc_req_samp(float amt, const Vec2<int> &img_size, float img_scale) const noexcept {
+Delta::calc_req_samp(float amt, const Vec2<float> &img_size, float img_scale) const noexcept {
     if (!is_moved)
         return 0;
 
-    auto size = static_cast<Vec2<float>>(img_size) * img_scale + center_from.abs();
+    auto size = (img_size + center_from.abs()) * img_scale;
     float r = size.norm(2) * 0.5f;
 
     Vec3<float> req_samps(rel_dist, (rel_scale - 1.0f) * r, rel_rot * r);
     req_samps *= amt;
-    return static_cast<int>(req_samps.norm(-1));
+    return static_cast<int>(std::ceil(req_samps.norm(-1)));
 }
 
-Delta::htm_and_adj
-Delta::calc_htm(bool is_inv, int samp, float amt) const noexcept {
+Delta::Mapping
+Delta::calc_mapping(bool is_inv, float amt, int samp) const noexcept {
     float step_amt = amt / static_cast<float>(samp);
     float step_rot = rel_rot * step_amt;
-    float step_scale = samp == 1 ? rel_scale * amt : std::pow(rel_scale * amt, 1.0f / static_cast<float>(samp));
+    float step_scale = 1.0f + (rel_scale - 1.0f) * amt;
     auto step_pos = rel_pos * step_amt;
     auto adj = Mat3<float>::identity();
+
+    if (samp > 1)
+        step_scale = std::pow(step_scale, 1.0f / static_cast<float>(samp));
 
     if (is_inv) {
         auto inv_ori = Mat2<float>::rotation(-step_rot, 1.0f / step_scale);
@@ -79,13 +82,13 @@ Delta::calc_htm(bool is_inv, int samp, float amt) const noexcept {
 }
 
 Vec2<float>
-Delta::calc_bbox(const Vec2<int> &img_size, float amt, float offset_rot) const noexcept {
+Delta::calc_bbox(const Vec2<float> &img_size, float amt, float offset_rot) const noexcept {
     if (is_zero(amt) && is_zero(offset_rot)) {
-        return static_cast<Vec2<float>>(img_size);
+        return img_size;
     } else {
         float theta = rel_rot * amt - offset_rot;
         auto rot_mat = Mat2<float>::rotation(theta);
-        Vec2<float> size = static_cast<Vec2<float>>(img_size) * rel_scale * amt;
+        Vec2<float> size = img_size * (1.0f + (rel_scale - 1.0f) * amt);
         return rot_mat.abs() * size;
     }
 }

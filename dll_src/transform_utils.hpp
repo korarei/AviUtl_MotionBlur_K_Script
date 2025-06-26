@@ -8,7 +8,7 @@
 #include "vector_2d.hpp"
 #include "vector_3d.hpp"
 
-#define ZOOM_MIN 1e-2f
+#define ZOOM_MIN 1.0e-2f
 
 enum class AngleUnit : int {
     Rad,
@@ -43,24 +43,28 @@ struct Transform {
 
 class Delta {
 public:
-    using htm_and_adj = std::pair<Mat3<float>, Mat3<float>>;
+    // HTM (Homogeneous Transformation Matrix) & Adjustment Matrix (Inverse of the orientation).
+    struct Mapping {
+        Mat3<float> htm;
+        Mat3<float> adj;
+    };
 
     // Constructors.
     Delta(const Transform &from, const Transform &to) noexcept;
 
     // Getters.
-    [[nodiscard]] constexpr const bool &get_is_moved() const noexcept { return is_moved; }
+    [[nodiscard]] constexpr const float &get_scale() const noexcept { return rel_scale; }
     [[nodiscard]] constexpr const Vec2<float> &get_center() const noexcept { return center_to; }
+    [[nodiscard]] constexpr const bool &get_is_moved() const noexcept { return is_moved; }
 
     // Calculate the required samples.
-    [[nodiscard]] int calc_req_samp(float amt, const Vec2<int> &img_size, float img_scale) const noexcept;
+    [[nodiscard]] int calc_req_samp(float amt, const Vec2<float> &img_size, float img_scale = 1.0f) const noexcept;
 
-    // Calculate the HTM (Homogeneous Transformation Matrix).
-    // Out: 1. HTM, 2. Adjustment Matrix (Inverse of the orientation).
-    [[nodiscard]] htm_and_adj calc_htm(bool is_inv = false, int samp = 1, float amt = 1.0f) const noexcept;
+    // Calculate the mapping structure.
+    [[nodiscard]] Mapping calc_mapping(bool is_inv = false, float amt = 1.0f, int samp = 1) const noexcept;
 
     // Calculate the bounding box size.
-    [[nodiscard]] Vec2<float> calc_bbox(const Vec2<int> &img_size, float amt = 1.0f,
+    [[nodiscard]] Vec2<float> calc_bbox(const Vec2<float> &img_size, float amt = 1.0f,
                                         float offset_rot = 0.0f) const noexcept;
 
 private:
