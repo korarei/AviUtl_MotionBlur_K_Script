@@ -46,7 +46,7 @@ public:
     // HTM (Homogeneous Transformation Matrix) & Adjustment Matrix (Inverse of the orientation).
     struct Mapping {
         Mat3<float> htm;
-        Mat3<float> adj;
+        Mat3<float> adj_mat;
     };
 
     // Constructors.
@@ -58,10 +58,10 @@ public:
     [[nodiscard]] constexpr const bool &get_is_moved() const noexcept { return is_moved; }
 
     // Calculate the required samples.
-    [[nodiscard]] int calc_req_samp(float amt, const Vec2<float> &img_size, float img_scale = 1.0f) const noexcept;
+    [[nodiscard]] int calc_req_samp(float amt, const Vec2<float> &img_size, float adj = 1.0f) const noexcept;
 
     // Calculate the mapping structure.
-    [[nodiscard]] Mapping calc_mapping(bool is_inv = false, float amt = 1.0f, int samp = 1) const noexcept;
+    [[nodiscard]] Mat3<float> calc_htm(float amt = 1.0f, bool is_inv = false, int samp = 1) const noexcept;
 
     // Calculate the bounding box size.
     [[nodiscard]] Vec2<float> calc_bbox(const Vec2<float> &img_size, float amt = 1.0f,

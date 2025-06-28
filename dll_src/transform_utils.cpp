@@ -36,25 +36,23 @@ Delta::Delta(const Transform &from, const Transform &to) noexcept :
     is_moved(!is_zero(rel_dist) || !are_equal(rel_scale, 1.0f) || !is_zero(rel_rot)) {}
 
 int
-Delta::calc_req_samp(float amt, const Vec2<float> &img_size, float img_scale) const noexcept {
+Delta::calc_req_samp(float amt, const Vec2<float> &img_size, float adj) const noexcept {
     if (!is_moved)
         return 0;
 
-    auto size = (img_size + center_from.abs()) * img_scale;
+    auto size = img_size + center_from.abs();
     float r = size.norm(2) * 0.5f;
 
-    Vec3<float> req_samps(rel_dist, (rel_scale - 1.0f) * r, rel_rot * r);
-    req_samps *= amt;
-    return static_cast<int>(std::ceil(req_samps.norm(-1)));
+    auto req_samps = Vec3<float>(rel_dist, (rel_scale - 1.0f) * r, rel_rot * r) * amt;
+    return static_cast<int>(std::ceil(req_samps.norm(-1) * adj));
 }
 
-Delta::Mapping
-Delta::calc_mapping(bool is_inv, float amt, int samp) const noexcept {
+Mat3<float>
+Delta::calc_htm(float amt, bool is_inv, int samp) const noexcept {
     float step_amt = amt / static_cast<float>(samp);
     float step_rot = rel_rot * step_amt;
     float step_scale = 1.0f + (rel_scale - 1.0f) * amt;
     auto step_pos = rel_pos * step_amt;
-    auto adj = Mat3<float>::identity();
 
     if (samp > 1)
         step_scale = std::pow(step_scale, 1.0f / static_cast<float>(samp));
@@ -63,21 +61,11 @@ Delta::calc_mapping(bool is_inv, float amt, int samp) const noexcept {
         auto inv_ori = Mat2<float>::rotation(-step_rot, 1.0f / step_scale);
         auto inv_step_pos = -(inv_ori * step_pos);
         auto trans = Vec3<float>(inv_step_pos, 1.0f);
-        auto htm = Mat3<float>(inv_ori, trans);
-
-        if (samp > 1)
-            adj = Mat3<float>::rotation(step_rot, 2, step_scale);
-
-        return {htm, adj};
+        return Mat3<float>(inv_ori, trans);
     } else {
         auto ori = Mat2<float>::rotation(step_rot, step_scale);
         auto trans = Vec3<float>(step_pos, 1.0f);
-        auto htm = Mat3<float>(ori, trans);
-
-        if (samp > 1)
-            adj = Mat3<float>::rotation(-step_rot, 2, 1.0f / step_scale);
-
-        return {htm, adj};
+        return Mat3<float>(ori, trans);
     }
 }
 
