@@ -89,9 +89,9 @@ GLShaderKit::setPlaneVertex(int n) const {
 }
 
 void
-GLShaderKit::setShader(const std::string &shader_path, bool force_reload) const {
+GLShaderKit::setShader(const char *shader_path, bool force_reload) const {
     lua_getfield(L, -1, "setShader");
-    lua_pushstring(L, shader_path.c_str());
+    lua_pushstring(L, shader_path);
     lua_pushboolean(L, force_reload);
     lua_call(L, 2, 0);
 }
@@ -107,27 +107,27 @@ GLShaderKit::setTexture2D(int unit, const Image &img) const {
 }
 
 void
-GLShaderKit::setFloat(std::string name, const std::vector<float> &vec) const {
+GLShaderKit::setFloat(const char *name, const std::vector<float> &vec) const {
     lua_getfield(L, -1, "setFloat");
-    lua_pushstring(L, name.c_str());
+    lua_pushstring(L, name);
     for (float value : vec) lua_pushnumber(L, value);
 
     lua_call(L, vec.size() + 1, 0);
 }
 
 void
-GLShaderKit::setInt(std::string name, const std::vector<int> &vec) const {
+GLShaderKit::setInt(const char *name, const std::vector<int> &vec) const {
     lua_getfield(L, -1, "setInt");
-    lua_pushstring(L, name.c_str());
+    lua_pushstring(L, name);
     for (int value : vec) lua_pushinteger(L, value);
 
     lua_call(L, vec.size() + 1, 0);
 }
 
 void
-GLShaderKit::setMatrix(std::string name, std::string type, bool transpose, float angle_rad) const {
+GLShaderKit::setMatrix(const char *name, std::string type, bool transpose, float angle_rad) const {
     lua_getfield(L, -1, "setMatrix");
-    lua_pushstring(L, name.c_str());
+    lua_pushstring(L, name);
     lua_pushstring(L, type.c_str());
     lua_pushboolean(L, transpose);
 
@@ -148,7 +148,8 @@ GLShaderKit::setMatrix(std::string name, std::string type, bool transpose, float
     lua_call(L, 4, 0);
 }
 
-void GLShaderKit::setMat3(const char *name, bool transpose, const Mat3<float> &mat3) const {
+void
+GLShaderKit::setMat3(const char *name, bool transpose, const Mat3<float> &mat3) const {
     lua_getfield(L, -1, "setMatrix");
     lua_pushstring(L, name);
     lua_pushstring(L, "3x3");
@@ -179,9 +180,9 @@ void GLShaderKit::setMat3(const char *name, bool transpose, const Mat3<float> &m
 }
 
 void
-GLShaderKit::draw(std::string mode, Image &img) const {
+GLShaderKit::draw(const char *mode, Image &img) const {
     lua_getfield(L, -1, "draw");
-    lua_pushstring(L, mode.c_str());
+    lua_pushstring(L, mode);
     lua_pushlightuserdata(L, img.data);
     lua_pushinteger(L, img.size.get_x());
     lua_pushinteger(L, img.size.get_y());

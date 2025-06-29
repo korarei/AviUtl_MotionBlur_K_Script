@@ -42,13 +42,13 @@ public:
     bool activate() const;
     void deactivate() const;
     void setPlaneVertex(int n) const;
-    void setShader(const std::string &shader_path, bool force_reload) const;
+    void setShader(const char *shader_path, bool force_reload) const;
     void setTexture2D(int unit, const Image &img) const;
-    void setFloat(std::string name, const std::vector<float> &vec) const;
-    void setInt(std::string name, const std::vector<int> &vec) const;
-    void setMatrix(std::string name, std::string type, bool transpose, float angle_rad) const;
+    void setFloat(const char* name, const std::vector<float> &vec) const;
+    void setInt(const char* name, const std::vector<int> &vec) const;
+    void setMatrix(const char* name, std::string type, bool transpose, float angle_rad) const;
     void setMat3(const char *name, bool transpose, const Mat3<float> &mat3) const;
-    void draw(std::string mode, Image &img) const;
+    void draw(const char* mode, Image &img) const;
 
     void setParamsForOMBStep(const std::string &name, const Steps &steps) const;  // OMBStep: Object Motion Blur Step
 

@@ -35,38 +35,34 @@ Delta::Delta(const Transform &from, const Transform &to) noexcept :
     rel_dist(rel_pos.norm(2)),
     is_moved(!is_zero(rel_dist) || !are_equal(rel_scale, 1.0f) || !is_zero(rel_rot)) {}
 
-int
-Delta::calc_req_samp(float amt, const Vec2<float> &img_size, float adj) const noexcept {
-    if (!is_moved)
-        return 0;
+Delta::Mapping
+Delta::calc_offset_mapping(const SegData<Delta> &delta_data, const SegData<float> &amt_data, bool is_inv) noexcept {
+    float offset_rot = delta_data.seg1->get_rot() * *amt_data.seg1;
+    float offset_scale = std::pow(delta_data.seg1->get_scale(), *amt_data.seg1);
+    auto offset_pos = delta_data.seg1->get_pos() * *amt_data.seg1;
 
-    auto size = img_size + center_from.abs();
-    float r = size.norm(2) * 0.5f;
+    if (amt_data.seg2) {
+        offset_rot += delta_data.seg2->get_rot() * *amt_data.seg2;
+        offset_scale *= std::pow(delta_data.seg2->get_scale(), *amt_data.seg2);
+        auto pos_seg2 = delta_data.seg2->get_pos();
+        offset_pos += pos_seg2.rotate(delta_data.seg1->get_rot(), delta_data.seg1->get_scale()) * *amt_data.seg2;
+    }
 
-    auto req_samps = Vec3<float>(rel_dist, (rel_scale - 1.0f) * r, rel_rot * r) * amt;
-    return static_cast<int>(std::ceil(req_samps.norm(-1) * adj));
+    auto htm = calc_htm_impl(offset_rot, offset_scale, offset_pos, is_inv);
+    auto adj_mat = htm;
+    adj_mat[2] = Vec3<float>(0.0f, 0.0f, 1.0f);
+
+    return {htm, adj_mat};
 }
 
 Mat3<float>
-Delta::calc_htm(float amt, bool is_inv, int samp) const noexcept {
+Delta::calc_htm(float amt, int samp, bool is_inv) const noexcept {
     float step_amt = amt / static_cast<float>(samp);
     float step_rot = rel_rot * step_amt;
-    float step_scale = 1.0f + (rel_scale - 1.0f) * amt;
+    float step_scale = std::pow(rel_scale, step_amt);
     auto step_pos = rel_pos * step_amt;
 
-    if (samp > 1)
-        step_scale = std::pow(step_scale, 1.0f / static_cast<float>(samp));
-
-    if (is_inv) {
-        auto inv_ori = Mat2<float>::rotation(-step_rot, 1.0f / step_scale);
-        auto inv_step_pos = -(inv_ori * step_pos);
-        auto trans = Vec3<float>(inv_step_pos, 1.0f);
-        return Mat3<float>(inv_ori, trans);
-    } else {
-        auto ori = Mat2<float>::rotation(step_rot, step_scale);
-        auto trans = Vec3<float>(step_pos, 1.0f);
-        return Mat3<float>(ori, trans);
-    }
+    return calc_htm_impl(step_rot, step_scale, step_pos, is_inv);
 }
 
 Vec2<float>

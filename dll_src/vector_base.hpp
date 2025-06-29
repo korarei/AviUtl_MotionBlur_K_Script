@@ -348,11 +348,24 @@ public:
     }
 
     // Setters.
-    constexpr void set_elem(std::size_t row, std::size_t col, T val) noexcept { (*this)(col, row) = val; }
+    constexpr void set_elem(std::size_t row, std::size_t col, T val) {
+        if (col >= N || row >= VecType::size())
+            throw std::out_of_range("Mat element indices out of range.");
 
-    constexpr void set_col(std::size_t idx, const VecType &col) noexcept { cols[idx] = col; }
+        (*this)(col, row) = val;
+    }
 
-    constexpr void set_row(std::size_t idx, const VecType &row) noexcept {
+    constexpr void set_col(std::size_t idx, const VecType &col) {
+        if (idx >= N)
+            throw std::out_of_range("Mat column index out of range.");
+
+        cols[idx] = col;
+    }
+
+    constexpr void set_row(std::size_t idx, const VecType &row) {
+        if (idx >= VecType::size())
+            throw std::out_of_range("Mat row index out of range.");
+
         for (std::size_t j = 0; j < N; ++j) {
             (*this)(j, idx) = row[j];
         }

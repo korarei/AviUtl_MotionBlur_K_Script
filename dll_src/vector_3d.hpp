@@ -46,6 +46,14 @@ operator*(T scalar, const Vec3<T> &vec) noexcept {
     return vec * scalar;
 }
 
+// Overload the output stream operator for Vec3.
+template <vec_base::Arithmetic T>
+std::ostream &
+operator<<(std::ostream &os, const Vec3<T> &vec) {
+    os << "Vec3(" << vec.get_x() << ", " << vec.get_y() << ", " << vec.get_z() << ")";
+    return os;
+}
+
 template <vec_base::Arithmetic T>
 class Mat3 : public vec_base::MatBase<Mat3<T>, Vec3<T>, 3, T> {
 public:

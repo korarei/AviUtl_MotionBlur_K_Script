@@ -10,10 +10,7 @@ uniform vec2 pivot;
 uniform int mix_orig_img;
 uniform ivec2 samp;
 
-uniform vec2 step_pos_offset;
-uniform float step_scale_offset;
-uniform mat2 step_rot_mat_offset;
-
+uniform mat3 htm_offset;
 uniform mat3 init_htm_seg1;
 uniform mat3 init_htm_seg2;
 
@@ -66,25 +63,25 @@ blend(in vec4 col_base, in vec4 col_blend) {
 void
 main() {
     vec2 uv = TexCoord * res - pivot;
-    uv *= step_scale_offset;
-    uv += step_pos_offset;
-    uv = step_rot_mat_offset * uv;
+    vec3 uv3 = vec3(uv, 1.0);
 
-    vec4 col = safe_texture(uv + pivot);
+    // Set the start position.
+    uv3 = htm_offset * uv3;
+    vec4 col = safe_texture(uv3.st + pivot);
     col.rgb *= col.a;
 
     int total_samp = 1;
 
     // Apply blur.
-    vec3 uv3 = vec3(uv, 1.0);
     apply_blur(uv3, col, samp[0], init_htm_seg1);
     total_samp += samp[0];
+
     if (samp[1] != 0) {
         apply_blur(uv3, col, samp[1], init_htm_seg2);
         total_samp += samp[1];
     }
 
-    // Avoid division by zero.
+    // Compute weighted average color with alpha, avoiding division by zero.
     float is_zero = step(col.a, EPSILON);
     col.rgb = mix(col.rgb / max(col.a, EPSILON), vec3(0.0), is_zero);
     col.a /= float(total_samp);
