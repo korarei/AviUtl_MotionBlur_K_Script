@@ -36,6 +36,24 @@ struct SegmentData {
     SegmentData() : seg1(std::nullopt), seg2(std::nullopt), offset(std::nullopt) {}
 };
 
+template <typename T>
+struct SegData {
+    std::optional<T> seg1;
+    std::optional<T> seg2;
+
+    SegData() : seg1(std::nullopt), seg2(std::nullopt) {}
+    SegData(std::optional<T> s1, std::optional<T> s2) : seg1(s1), seg2(s2) {}
+};
+
+template <typename T>
+struct MappingData {
+    std::optional<T> offset;
+    std::optional<T> seg1;
+    std::optional<T> seg2;
+
+    MappingData() : offset(std::nullopt), seg1(std::nullopt), seg2(std::nullopt) {}
+};
+
 // The corner coordinates of the object in each frame as seen from the current object.
 struct Corner {
     Vec2<float> location;

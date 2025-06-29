@@ -1,13 +1,14 @@
 #include "transform_utils.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 // Transform class
 // Constructor
-Transform::Transform(float x, float y, float zoom, float rz_deg, float cx, float cy) :
+Transform::Transform(float x, float y, float zoom, float rz_deg, float cx, float cy) noexcept :
     x(x), y(y), zoom(std::max(zoom, ZOOM_MIN)), rz_deg(rz_deg), rz_rad(to_rad(rz_deg)), cx(cx), cy(cy) {}
 
-Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType offset_type) :
+Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType offset_type) noexcept :
     x(obj_utls.calc_track_val(TrackName::X, offset_frame, offset_type)),
     y(obj_utls.calc_track_val(TrackName::Y, offset_frame, offset_type)),
     zoom(std::max(obj_utls.calc_track_val(TrackName::Zoom, offset_frame, offset_type), ZOOM_MIN)),
@@ -17,17 +18,63 @@ Transform::Transform(const ObjectUtils &obj_utls, int offset_frame, OffsetType o
     cy(obj_utls.get_cy()) {}
 
 void
-Transform::apply_geometry() {
-    zoom = ZOOM_MIN;
-}
-
-void
-Transform::apply_geometry(const Geometry &geo) {
+Transform::apply_geometry(const Geometry &geo) noexcept {
     x += ObjectUtils::calc_ox(geo.ox);
     y += ObjectUtils::calc_oy(geo.oy);
     zoom = std::max(zoom * ObjectUtils::calc_zoom(geo.zoom), ZOOM_MIN);
     rz_deg = ObjectUtils::calc_rz(geo.rz, rz_deg);
     rz_rad = to_rad(rz_deg);
+}
+
+Delta::Delta(const Transform &from, const Transform &to) noexcept :
+    rel_rot(to.rz_rad - from.rz_rad),
+    rel_scale(std::max(to.zoom / from.zoom, ZOOM_MIN)),
+    rel_pos((to.get_pos() - from.get_pos()).rotate(-from.rz_rad, 100.0f / from.zoom)),
+    center_to(-to.get_center()),
+    center_from(-from.get_center()),
+    rel_dist(rel_pos.norm(2)),
+    is_moved(!is_zero(rel_dist) || !are_equal(rel_scale, 1.0f) || !is_zero(rel_rot)) {}
+
+Delta::Mapping
+Delta::calc_offset_mapping(const SegData<Delta> &delta_data, const SegData<float> &amt_data, bool is_inv) noexcept {
+    float offset_rot = delta_data.seg1->get_rot() * *amt_data.seg1;
+    float offset_scale = std::pow(delta_data.seg1->get_scale(), *amt_data.seg1);
+    auto offset_pos = delta_data.seg1->get_pos() * *amt_data.seg1;
+
+    if (amt_data.seg2) {
+        offset_rot += delta_data.seg2->get_rot() * *amt_data.seg2;
+        offset_scale *= std::pow(delta_data.seg2->get_scale(), *amt_data.seg2);
+        auto pos_seg2 = delta_data.seg2->get_pos();
+        offset_pos += pos_seg2.rotate(delta_data.seg1->get_rot(), delta_data.seg1->get_scale()) * *amt_data.seg2;
+    }
+
+    auto htm = calc_htm_impl(offset_rot, offset_scale, offset_pos, is_inv);
+    auto adj_mat = htm;
+    adj_mat[2] = Vec3<float>(0.0f, 0.0f, 1.0f);
+
+    return {htm, adj_mat};
+}
+
+Mat3<float>
+Delta::calc_htm(float amt, int samp, bool is_inv) const noexcept {
+    float step_amt = amt / static_cast<float>(samp);
+    float step_rot = rel_rot * step_amt;
+    float step_scale = std::pow(rel_scale, step_amt);
+    auto step_pos = rel_pos * step_amt;
+
+    return calc_htm_impl(step_rot, step_scale, step_pos, is_inv);
+}
+
+Vec2<float>
+Delta::calc_bbox(const Vec2<float> &img_size, float amt, float offset_rot) const noexcept {
+    if (is_zero(amt) && is_zero(offset_rot)) {
+        return img_size;
+    } else {
+        float theta = rel_rot * amt - offset_rot;
+        auto rot_mat = Mat2<float>::rotation(theta);
+        Vec2<float> size = img_size * (1.0f + (rel_scale - 1.0f) * amt);
+        return rot_mat.abs() * size;
+    }
 }
 
 // Displacements class
@@ -48,12 +95,12 @@ Displacements::Displacements(const Transform &from, const Transform &to) :
 
 // Calculate the required_samples.
 int
-Displacements::calc_required_samples(float blur_amount, const Vec2<int> &image_size, float scale) const {
+Displacements::calc_required_samples(float blur_amount, const Vec2<int> &image_size, float factor) const {
     if (!is_moved)
         return 0;
 
     Vec2<float> abs_center(std::abs(center_from.get_x()), std::abs(center_from.get_y()));
-    Vec2<float> size = static_cast<Vec2<float>>(image_size) * scale + abs_center;
+    Vec2<float> size = static_cast<Vec2<float>>(image_size) * factor + abs_center;
     float radius = size.norm(2) * 0.5f;
 
     return std::max({static_cast<int>(std::ceil(std::abs(local_distance) * blur_amount)),
