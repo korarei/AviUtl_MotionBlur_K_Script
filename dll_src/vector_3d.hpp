@@ -83,7 +83,7 @@ public:
     }
 
     // Create rotation matrix.
-    [[nodiscard]] static constexpr Mat3 rotation(T theta, int axis = 2, T scale = T{1})
+    [[nodiscard]] static constexpr Mat3 rotation(T theta, T scale = T{1}, int axis = 2)
         requires std::floating_point<T>
     {
         T c = std::cos(theta) * scale;

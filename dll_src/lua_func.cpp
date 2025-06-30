@@ -190,18 +190,7 @@ GLShaderKit::draw(const char *mode, Image &img) const {
 }
 
 void
-GLShaderKit::setParamsForOMBStep(const std::string &name, const Steps &steps) const {
-    std::string pos_param = "step_pos_" + name;
-    std::string scale_param = "step_scale_" + name;
-    std::string rot_param = "step_rot_mat_" + name;
-
-    setFloat(pos_param.c_str(), {steps.location.get_x(), steps.location.get_y()});
-    setFloat(scale_param.c_str(), {steps.scale});
-    setMatrix(rot_param.c_str(), "2x2", false, steps.rz_rad);
-}
-
-void
-expand_image(const std::array<int, 4> &expansion, lua_State *L) {
+lua_func::expand_image(const std::array<int, 4> &expansion, lua_State *L) {
     lua_getglobal(L, "obj");
     lua_getfield(L, -1, "effect");
     lua_pushstring(L, "領域拡張");

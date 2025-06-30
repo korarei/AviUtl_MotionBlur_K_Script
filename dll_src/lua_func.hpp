@@ -44,17 +44,17 @@ public:
     void setPlaneVertex(int n) const;
     void setShader(const char *shader_path, bool force_reload) const;
     void setTexture2D(int unit, const Image &img) const;
-    void setFloat(const char* name, const std::vector<float> &vec) const;
-    void setInt(const char* name, const std::vector<int> &vec) const;
-    void setMatrix(const char* name, std::string type, bool transpose, float angle_rad) const;
+    void setFloat(const char *name, const std::vector<float> &vec) const;
+    void setInt(const char *name, const std::vector<int> &vec) const;
+    void setMatrix(const char *name, std::string type, bool transpose, float angle_rad) const;
     void setMat3(const char *name, bool transpose, const Mat3<float> &mat3) const;
-    void draw(const char* mode, Image &img) const;
-
-    void setParamsForOMBStep(const std::string &name, const Steps &steps) const;  // OMBStep: Object Motion Blur Step
+    void draw(const char *mode, Image &img) const;
 
 private:
     lua_State *L;
 };
 
+namespace lua_func {
 void
 expand_image(const std::array<int, 4> &expansion, lua_State *L);
+}  // namespace lua_func

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #define NOMINMAX
 #include <exedit.hpp>
 
@@ -26,23 +27,20 @@ struct Geometry {
         is_valid(true), ox(ox_), oy(oy_), cx(cx_), cy(cy_), zoom(zoom_), rz(rz_) {}
 };
 
-// A structure to store data for each segment.
+// The structure to store data for each segment.
 template <typename T>
-struct SegmentData {
-    std::optional<T> seg1;
-    std::optional<T> seg2;
-    std::optional<T> offset;
-
-    SegmentData() : seg1(std::nullopt), seg2(std::nullopt), offset(std::nullopt) {}
+struct SegData {
+    T seg1;
+    T seg2;
 };
 
 template <typename T>
-struct SegData {
+struct OptSegData {
     std::optional<T> seg1;
     std::optional<T> seg2;
 
-    SegData() : seg1(std::nullopt), seg2(std::nullopt) {}
-    SegData(std::optional<T> s1, std::optional<T> s2) : seg1(s1), seg2(s2) {}
+    OptSegData() : seg1(std::nullopt), seg2(std::nullopt) {}
+    OptSegData(std::optional<T> s1, std::optional<T> s2) : seg1(s1), seg2(s2) {}
 };
 
 template <typename T>
@@ -52,19 +50,4 @@ struct MappingData {
     std::optional<T> seg2;
 
     MappingData() : offset(std::nullopt), seg1(std::nullopt), seg2(std::nullopt) {}
-};
-
-// The corner coordinates of the object in each frame as seen from the current object.
-struct Corner {
-    Vec2<float> location;
-    Vec2<int> upper_left;
-    Vec2<int> lower_right;
-
-    Corner() : location(0.0f, 0.0f), upper_left(0, 0), lower_right(0, 0) {}
-};
-
-// Blur step.
-struct Steps {
-    Vec2<float> location;
-    float scale, rz_rad;
 };

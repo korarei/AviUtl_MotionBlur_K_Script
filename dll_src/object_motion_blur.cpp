@@ -4,12 +4,8 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
-#include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
-#include <variant>
 #define NOMINMAX
 #include <Windows.h>
 
@@ -53,7 +49,7 @@ apply_geo(Transform &tf, std::uint32_t shared_mem_key, std::uint32_t slot_id, co
 }
 
 // Calculate the transform before frame 0.
-inline static std::variant<Transform, std::array<Transform, 2>>
+inline static std::array<Transform, 2>
 calc_neg_frame(const std::array<Transform, 3> &tf_array, bool will_calc_2f = false) {
     Transform d1 = tf_array[1] - tf_array[0];
     Transform d2 = tf_array[2] - tf_array[1];
@@ -61,14 +57,14 @@ calc_neg_frame(const std::array<Transform, 3> &tf_array, bool will_calc_2f = fal
 
     // Uniformly accelerated linear motion
     if (will_calc_2f) {
-        return std::array<Transform, 2>{tf_neg_1f, tf_neg_1f - d1 * 3.0f + d2 * 2.0f};
+        return {tf_neg_1f, tf_neg_1f - d1 * 3.0f + d2 * 2.0f};
     } else {
-        return tf_neg_1f;
+        return {tf_neg_1f, Transform()};
     }
 }
 
 // Calculate the amounticient that determines the length of the blur.
-inline static SegData<float>
+inline static constexpr SegData<float>
 calc_blur_amt(float shutter_angle) {
     constexpr float inv_360 = 1.0f / 360.0f;
 
@@ -76,48 +72,25 @@ calc_blur_amt(float shutter_angle) {
     const float seg1 = std::min(ratio, 1.0f);
     const float seg2 = std::max(ratio - 1.0f, 0.0f);
 
-    return SegData<float>(seg1, seg2);
+    return {seg1, seg2};
 }
 
 // Calculate the amounticient that determines the offset movement amount.
-static std::array<float, 3>
-calc_offset_amt(const SegmentData<Displacements> &disp_data, float shutter_angle, float shutter_phase) {
-    constexpr float inv_360 = 1.0f / 360.0f;
-    constexpr float inv_720 = 1.0f / 720.0f;
-
-    if (!disp_data.seg1 || !disp_data.seg1->get_is_moved()) {
-        return {0.0f, 0.0f, 0.0f};
-    } else if (!disp_data.seg2) {
-        float amt = (shutter_angle + shutter_phase) * inv_360;
-        return {amt, amt, amt};
-    } else if (disp_data.seg2->get_is_moved()) {
-        auto [distance, zoom, rz_deg] = disp_data.seg2->calc_relative_displacements(disp_data.seg1.value());
-        float factor = (shutter_angle + shutter_phase) * inv_720;
-        auto calc = [&](float ratio) -> float {
-            return (3.0f - ratio + (ratio - 1.0f) * shutter_angle * inv_360) * factor;
-        };
-        return {calc(distance), calc(zoom), calc(rz_deg)};
-    } else {
-        float amt = 1.0f + shutter_phase * inv_360;
-        return {amt, amt, amt};
-    }
-}
-
-inline static SegData<float>
+inline static constexpr SegData<float>
 calc_offset_amt(float shutter_angle, float shutter_phase) {
     float amt = (shutter_angle + shutter_phase) / -360.0f;
     if (shutter_angle <= 360.0f) {
-        return SegData<float>(amt, 0.0f);
+        return {amt, 0.0f};
     } else {
         float amt_seg1 = std::max(amt, -1.0f);
         float amt_seg2 = std::min(amt + 1.0f, 0.0f);
-        return SegData<float>(amt_seg1, amt_seg2);
+        return {amt_seg1, amt_seg2};
     }
 }
 
 // Calculate the actual number of samples to be used.
-inline static SegData<int>
-calc_samp(const SegData<int> &req_samp_data, int samp_lim, int total_req_samp) {
+inline static constexpr SegData<int>
+calc_samp(const OptSegData<int> &req_samp_data, int samp_lim, int total_req_samp) {
     if (!req_samp_data.seg2) {
         int samp = std::min(*req_samp_data.seg1, samp_lim);
         return SegData<int>(samp, 0);
@@ -125,155 +98,77 @@ calc_samp(const SegData<int> &req_samp_data, int samp_lim, int total_req_samp) {
 
     int samp_seg1 = (samp_lim * *req_samp_data.seg1) / total_req_samp;
     int samp_seg2 = samp_lim - samp_seg1;
-    return SegData<int>(samp_seg1, samp_seg2);
+    return {samp_seg1, samp_seg2};
 }
 
-inline static Corner
-calc_corners(const Vec2<float> &base, const Vec2<float> &disp, const Vec2<float> &bbox_size, float offset_scale,
-             const Vec2<int> &img_size) {
-    Corner corner;
-    corner.location = base + disp * offset_scale;
-    Vec2<float> diff_half_size = (bbox_size * offset_scale - static_cast<Vec2<float>>(img_size)) * 0.5f;
-    corner.upper_left = static_cast<Vec2<int>>((diff_half_size - corner.location).ceil());
-    corner.lower_right = static_cast<Vec2<int>>((diff_half_size + corner.location).ceil());
-    return corner;
-}
-
-// Resize the image.
-static void
-resize_image(const Vec2<int> &img_size, const Vec2<float> &center, const SegmentData<Displacements> &disp,
-             const SegData<float> &blur, const Steps &offset, float scale_factor_seg1, const Vec2<int> &max_size,
-             lua_State *L) {
-    if (!disp.seg1 || !blur.seg1) {
-        return;
-    }
-
-    float offset_scale_inv = 1.0f / offset.scale;
-    std::array<Corner, 3> corners;
-    int count = 2;
-
-    // Displacement.
-    Vec2<float> d0 = center.rotate(-offset.rz_rad, -1.0f) - offset.location;
-    Vec2<float> d1 = disp.seg1->calc_relative_location(*blur.seg1, offset.rz_rad);
-
-    // Bounding box size.
-    Vec2<float> curr_f_size = disp.seg1->calc_bounding_box_size(img_size, 0.0f, offset.rz_rad);
-    Vec2<float> prev_1f_size = disp.seg1->calc_bounding_box_size(img_size, *blur.seg1, offset.rz_rad);
-
-    corners[0] = calc_corners(center, d0, curr_f_size, offset_scale_inv, img_size);
-    corners[1] = calc_corners(corners[0].location, d1, prev_1f_size, offset_scale_inv, img_size);
-
-    // If the second segment is available, calculate the corners for it.
-    if (disp.seg2 && blur.seg2) {
-        Vec2<float> d2 = disp.seg2->calc_relative_location(*blur.seg2, offset.rz_rad)
-                                 .rotate(disp.seg1->get_rz(), scale_factor_seg1);
-        Vec2<float> prev_2f_size =
-                disp.seg2->calc_bounding_box_size(img_size, *blur.seg2, offset.rz_rad - disp.seg1->get_rz())
-                * scale_factor_seg1;
-
-        corners[2] = calc_corners(corners[1].location, d2, prev_2f_size, offset_scale_inv, img_size);
-        count++;
-    }
-
+static inline Vec2<int>
+expand_img(lua_State *L, bool can_render_2f, const Vec2<float> &img_size, const std::array<Vec2<float>, 3> &pos_data,
+           const std::array<Vec2<float>, 3> &bbox_data) {
     std::array<int, 4> expansion = {0, 0, 0, 0};  // top, bottom, left, right
+    int max_idx = can_render_2f ? 2 : 1;
 
-    for (int i = 0; i < count; i++) {
-        expansion[0] = std::max(expansion[0], corners[i].upper_left.get_y());
-        expansion[1] = std::max(expansion[1], corners[i].lower_right.get_y());
-        expansion[2] = std::max(expansion[2], corners[i].upper_left.get_x());
-        expansion[3] = std::max(expansion[3], corners[i].lower_right.get_x());
+    for (int i = 0; i <= max_idx; ++i) {
+        Vec2<float> diff_half_size = (bbox_data[i] - img_size) * 0.5f;
+        Vec2<int> upper_left = static_cast<Vec2<int>>((diff_half_size - pos_data[i]).ceil());
+        Vec2<int> lower_right = static_cast<Vec2<int>>((diff_half_size + pos_data[i]).ceil());
+
+        expansion[0] = std::max(expansion[0], upper_left.get_y());
+        expansion[1] = std::max(expansion[1], lower_right.get_y());
+        expansion[2] = std::max(expansion[2], upper_left.get_x());
+        expansion[3] = std::max(expansion[3], lower_right.get_x());
     }
 
-    Vec2<int> new_size = img_size + Vec2<int>(expansion[2] + expansion[3], expansion[0] + expansion[1]);
-    if (new_size.get_x() > max_size.get_x() || new_size.get_y() > max_size.get_y()) {
-        std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] Image size exceeds maximum size.\n"
-                  << "New size: " << new_size << "\nMax size:" << max_size << RESET_COL << std::endl;
-    }
+    lua_func::expand_image(expansion, L);
 
-    expand_image(expansion, L);
+    return static_cast<Vec2<int>>(img_size) + Vec2<int>(expansion[2] + expansion[3], expansion[0] + expansion[1]);
 }
 
 static void
-resize_img(lua_State *L, const SegData<Delta> &delta_data, const SegData<float> &offset_amt_data,
+resize_img(lua_State *L, bool can_render_2f, OptSegData<Delta> &delta_data, const SegData<float> &offset_amt_data,
            const SegData<float> &blur_amt_data, const Vec2<float> &center, const Vec2<float> &img_size,
            const Vec2<int> &max_size) {
     MappingData<Mat3<float>> htm_data;
-    MappingData<Vec3<float>> pos_data;
+    std::array<Vec2<float>, 3> pos_data{}, bbox_data{};
 
-    // Calculate the offset HTM (Homogeneous Transformation Matrix).
-    auto offset_mapping = Delta::calc_offset_mapping(delta_data, offset_amt_data);
-    htm_data.offset = offset_mapping.htm;
+    // Calculate the HTMs(Homogeneous Transformation Matrix).
+    htm_data.offset = Delta::calc_offset_htm(delta_data, offset_amt_data);
 
-    // Calculate the HTM.
-    htm_data.seg1 = delta_data.seg1->calc_htm(*blur_amt_data.seg1);
-    (*htm_data.seg1)[2] = offset_mapping.adj_mat * (*htm_data.seg1)[2];
+    htm_data.seg1 = delta_data.seg1->calc_htm(blur_amt_data.seg1);
 
-    if (delta_data.seg2) {
-        htm_data.seg2 = delta_data.seg2->calc_htm(*blur_amt_data.seg2);
-        (*htm_data.seg2)[2] = offset_mapping.adj_mat * (*htm_data.seg2)[2];
-    }
+    if (delta_data.seg2)
+        htm_data.seg2 = delta_data.seg2->calc_htm(blur_amt_data.seg2);
 
     // Forward Kinematics.
-    Vec3<float> pivot(center, 1.0f);
     Vec3<float> center_curr_f(-center, 1.0f);
     auto htm = *htm_data.offset;
-    pos_data.offset = (htm * center_curr_f) + pivot;
+    pos_data[0] = (htm * center_curr_f).to_vec2() + center;
+    bbox_data[0] = (htm.to_mat2().abs()) * img_size;
 
     auto center_prev_1f = Vec3<float>(delta_data.seg1->get_center(), 1.0f);
     htm = htm * *htm_data.seg1;
-    pos_data.seg1 = (htm * center_prev_1f) + pivot;
+    pos_data[1] = (htm * center_prev_1f).to_vec2() + center;
+    bbox_data[1] = (htm.to_mat2().abs()) * img_size;
 
     if (delta_data.seg2) {
         auto center_prev_2f = Vec3<float>(delta_data.seg2->get_center(), 1.0f);
         htm = htm * *htm_data.seg2;
-        pos_data.seg2 = (htm * center_prev_2f) + pivot;
+        pos_data[2] = (htm * center_prev_2f).to_vec2() + center;
+        bbox_data[2] = (htm.to_mat2().abs()) * img_size;
     }
 
-    lua_getglobal(L, "obj");
-    lua_getfield(L, -1, "effect");
-    lua_pushstring(L, "マスク");
-    lua_pushstring(L, "X");
-    lua_pushnumber(L, pos_data.offset->get_x());
-    lua_pushstring(L, "Y");
-    lua_pushnumber(L, pos_data.offset->get_y());
-    lua_pushstring(L, "サイズ");
-    lua_pushnumber(L, 50);
-    lua_pushstring(L, "マスクの反転");
-    lua_pushnumber(L, 1);
-    lua_call(L, 9, 0);
+    // Expand image size.
+    auto new_size = expand_img(L, can_render_2f, img_size, pos_data, bbox_data);
 
-    lua_getfield(L, -1, "effect");
-    lua_pushstring(L, "マスク");
-    lua_pushstring(L, "X");
-    lua_pushnumber(L, pos_data.seg1->get_x());
-    lua_pushstring(L, "Y");
-    lua_pushnumber(L, pos_data.seg1->get_y());
-    lua_pushstring(L, "サイズ");
-    lua_pushnumber(L, 50);
-    lua_pushstring(L, "マスクの反転");
-    lua_pushnumber(L, 1);
-    lua_call(L, 9, 0);
-
-    if (delta_data.seg2) {
-        lua_getfield(L, -1, "effect");
-        lua_pushstring(L, "マスク");
-        lua_pushstring(L, "X");
-        lua_pushnumber(L, pos_data.seg2->get_x());
-        lua_pushstring(L, "Y");
-        lua_pushnumber(L, pos_data.seg2->get_y());
-        lua_pushstring(L, "サイズ");
-        lua_pushnumber(L, 50);
-        lua_pushstring(L, "マスクの反転");
-        lua_pushnumber(L, 1);
-        lua_call(L, 9, 0);
-    }
-    lua_pop(L, 1);
+    // Warning.
+    if (new_size.get_x() > max_size.get_x() || new_size.get_y() > max_size.get_y())
+        std::cout << WARNING_COL << "[ObjectMotionBlur][WARNING] Image size exceeds maximum size.\n"
+                  << "New size: " << new_size << "\nMax size:" << max_size << RESET_COL << std::endl;
 }
 
 // Rendering.
 static void
-render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, const SegData<int> &samp_data,
-                          const MappingData<Mat3<float>> &htm_data) {
+render_object_motion_blur(lua_State *L, bool can_render_2f, const ObjectMotionBlurParams &params,
+                          const SegData<int> &samp_data, const MappingData<Mat3<float>> &htm_data) {
     namespace fs = std::filesystem;
 
     fs::path shader_path = get_self_dir() / params.shader_dir.relative_path() / "MotionBlur_K.frag";
@@ -285,23 +180,25 @@ render_object_motion_blur(lua_State *L, const ObjectMotionBlurParams &params, co
         throw std::runtime_error("GL Shader Kit is not available.");
 
     Image img = gl_shader_kit.get_image();
+    Vec2<float> res = static_cast<Vec2<float>>(img.size);
+    Vec2<float> pivot = img.center + res * 0.5f;
 
     gl_shader_kit.activate();
     gl_shader_kit.setPlaneVertex(1);
     gl_shader_kit.setShader(shader_path.string().c_str(), params.reload_shader);
 
     gl_shader_kit.setTexture2D(0, img);
-    Vec2<float> res = static_cast<Vec2<float>>(img.size);
-    Vec2<float> pivot = img.center + res * 0.5f;
     gl_shader_kit.setFloat("res", {res.get_x(), res.get_y()});
     gl_shader_kit.setFloat("pivot", {pivot.get_x(), pivot.get_y()});
     gl_shader_kit.setInt("mix_orig_img", {params.mix_orig_img});
-    gl_shader_kit.setInt("samp", {*samp_data.seg1, *samp_data.seg2});
+    gl_shader_kit.setInt("samp", {samp_data.seg1, samp_data.seg2});
 
     gl_shader_kit.setMat3("htm_offset", false, *htm_data.offset);
     gl_shader_kit.setMat3("init_htm_seg1", false, *htm_data.seg1);
-    if (htm_data.seg2)
+    if (can_render_2f)
         gl_shader_kit.setMat3("init_htm_seg2", false, *htm_data.seg2);
+    else
+        gl_shader_kit.setMat3("init_htm_seg2", false, Mat3<float>::identity());
 
     gl_shader_kit.draw("TRIANGLE_STRIP", img);
     gl_shader_kit.deactivate();
@@ -412,10 +309,8 @@ process_object_motion_blur(lua_State *L) {
         // Prepare the items needed for calculation.
         bool should_calc_prev_2f = params.shutter_angle > 360.0f && (params.calc_neg_f || local_frame >= 2);
 
-        SegmentData<Displacements> disp_data;
-        SegmentData<Steps> steps_data;
-        SegData<Delta> delta_data;
-        SegData<int> req_samp_data;
+        OptSegData<Delta> delta_data;
+        OptSegData<int> req_samp_data;
         MappingData<Mat3<float>> htm_data;
 
         Vec2<float> img_size = static_cast<Vec2<float>>(Vec2<int>(obj_utils.get_obj_w(), obj_utils.get_obj_h()));
@@ -437,60 +332,34 @@ process_object_motion_blur(lua_State *L) {
             // Calculate displacements from transforms.
             // Calculate frames that do not actually exist.
             if (local_frame == 0) {
-                auto tf_neg_f = calc_neg_frame(tf_array, should_calc_prev_2f);
-                std::visit(
-                        [&](auto &&tf) {
-                            if constexpr (std::is_same_v<std::decay_t<decltype(tf)>, Transform>) {
-                                disp_data.seg1 = Displacements(tf_array[0], tf);
-                                delta_data.seg1 = Delta(tf_array[0], tf);
-                            } else {
-                                auto &[neg_1f, neg_2f] = tf;
-                                disp_data.seg1 = Displacements(tf_array[0], neg_1f);
-                                disp_data.seg2 = Displacements(neg_1f, neg_2f);
-                                delta_data.seg1 = Delta(tf_array[0], neg_1f);
-                                delta_data.seg2 = Delta(neg_1f, neg_2f);
-                            }
-                        },
-                        tf_neg_f);
+                auto [tf_neg_1f, tf_neg_2f] = calc_neg_frame(tf_array, should_calc_prev_2f);
+
+                delta_data.seg1 = Delta(tf_array[0], tf_neg_1f);
+                if (should_calc_prev_2f)
+                    delta_data.seg2 = Delta(tf_neg_1f, tf_neg_2f);
+
             } else {
-                if (!should_calc_prev_2f) {
-                    disp_data.seg1 = Displacements(tf_array[1], tf_array[0]);
-                    delta_data.seg1 = Delta(tf_array[1], tf_array[0]);
-                } else {
-                    auto tf_neg_f = calc_neg_frame(tf_array);
-                    std::visit(
-                            [&](auto &&tf) {
-                                if constexpr (std::is_same_v<std::decay_t<decltype(tf)>, Transform>) {
-                                    disp_data.seg1 = Displacements(tf_array[1], tf_array[0]);
-                                    disp_data.seg2 = Displacements(tf_array[0], tf);
-                                    delta_data.seg1 = Delta(tf_array[1], tf_array[0]);
-                                    delta_data.seg2 = Delta(tf_array[0], tf);
-                                } else {
-                                    throw std::runtime_error("Unexpected variant type in tf_neg_f.");
-                                }
-                            },
-                            tf_neg_f);
+                delta_data.seg1 = Delta(tf_array[1], tf_array[0]);
+                if (should_calc_prev_2f) {
+                    auto [tf_neg_1f, _] = calc_neg_frame(tf_array);
+                    delta_data.seg2 = Delta(tf_array[0], tf_neg_1f);
                 }
             }
         } else if (local_frame != 0) {  // Default case.
             Transform tf_curr_f = Transform(obj_utils);
             Transform tf_prev_1f = Transform(obj_utils, -1);
-
             if (params.use_geo) {
                 tf_curr_f.apply_geometry(geo_curr_f);
                 apply_geo(tf_prev_1f, shared_mem_key, base_slot_id, geo_curr_f);
             }
 
-            disp_data.seg1 = Displacements(tf_curr_f, tf_prev_1f);
             delta_data.seg1 = Delta(tf_curr_f, tf_prev_1f);
 
             if (should_calc_prev_2f) {
                 Transform tf_prev_2f = Transform(obj_utils, -2);
-
                 if (params.use_geo)
                     apply_geo(tf_prev_2f, shared_mem_key, base_slot_id - 1u, geo_curr_f);
 
-                disp_data.seg2 = Displacements(tf_prev_1f, tf_prev_2f);
                 delta_data.seg2 = Delta(tf_prev_1f, tf_prev_2f);
             }
         }
@@ -502,18 +371,20 @@ process_object_motion_blur(lua_State *L) {
         if (!delta_data.seg1)
             return 0;
 
-        bool can_render_prev_2f = delta_data.seg2 && delta_data.seg2->get_is_moved();  // Render to 2 frames ago.
+        // Flag (Render to 2 frames ago).
+        bool can_render_2f = delta_data.seg2 && delta_data.seg2->get_is_moved();
 
         // Calculate the blur amounts.
         SegData<float> blur_amt_data = calc_blur_amt(params.shutter_angle);
+        SegData<float> offset_amt_data = calc_offset_amt(params.shutter_angle, params.shutter_phase);
 
         // Calculate the samples.
-        req_samp_data.seg1 = delta_data.seg1->calc_req_samp(*blur_amt_data.seg1, img_size);
+        req_samp_data.seg1 = delta_data.seg1->calc_req_samp(blur_amt_data.seg1, img_size);
         int total_req_samp = *req_samp_data.seg1;
 
-        if (can_render_prev_2f) {
+        if (can_render_2f) {
             float adj = delta_data.seg1->get_scale();
-            req_samp_data.seg2 = delta_data.seg2->calc_req_samp(*blur_amt_data.seg2, img_size, adj);
+            req_samp_data.seg2 = delta_data.seg2->calc_req_samp(blur_amt_data.seg2, img_size, adj);
             total_req_samp = *req_samp_data.seg1 + *req_samp_data.seg2;
         }
 
@@ -522,39 +393,18 @@ process_object_motion_blur(lua_State *L) {
 
         SegData<int> samp_data = calc_samp(req_samp_data, params.samp_lim - 1, total_req_samp);
 
-        // Calculate the offset HTM (Homogeneous Transformation Matrix).
-        SegData<float> offset_amt_data = calc_offset_amt(params.shutter_angle, params.shutter_phase);
-        auto offset_mapping = Delta::calc_offset_mapping(delta_data, offset_amt_data, true);
-        htm_data.offset = offset_mapping.htm;
-
-        // Calculate the HTM.
-        htm_data.seg1 = delta_data.seg1->calc_htm(*blur_amt_data.seg1, *samp_data.seg1, true);
-        (*htm_data.seg1)[2] = offset_mapping.adj_mat * (*htm_data.seg1)[2];
-
-        if (can_render_prev_2f) {
-            htm_data.seg2 = delta_data.seg2->calc_htm(*blur_amt_data.seg2, *samp_data.seg2, true);
-            (*htm_data.seg2)[2] = offset_mapping.adj_mat * (*htm_data.seg2)[2];
-        }
-
-        // Calculate the step data.
-        auto offset_amt = calc_offset_amt(disp_data, params.shutter_angle, params.shutter_phase);
-        steps_data.offset = disp_data.seg1->calc_steps(offset_amt, 1, 0.0f);
-        steps_data.seg1 = disp_data.seg1->calc_steps(*blur_amt_data.seg1, *samp_data.seg1, steps_data.offset->rz_rad);
-        if (can_render_prev_2f) {
-            steps_data.seg2 =
-                    disp_data.seg2->calc_steps(*blur_amt_data.seg2, *samp_data.seg2, steps_data.offset->rz_rad);
-        }
+        // Calculate the HTMs (Homogeneous Transformation Matrix).
+        htm_data.offset = Delta::calc_offset_htm(delta_data, offset_amt_data, true);
+        htm_data.seg1 = delta_data.seg1->calc_htm(blur_amt_data.seg1, samp_data.seg1, true);
+        if (can_render_2f)
+            htm_data.seg2 = delta_data.seg2->calc_htm(blur_amt_data.seg2, samp_data.seg2, true);
 
         // Resize.
-        if (!params.keep_size) {
-            resize_image(static_cast<Vec2<int>>(img_size), center, disp_data, blur_amt_data, *steps_data.offset,
-                         delta_data.seg1->get_scale(), max_size, L);
-        }
+        if (!params.keep_size)
+            resize_img(L, can_render_2f, delta_data, offset_amt_data, blur_amt_data, center, img_size, max_size);
 
         // Rendering.
-        render_object_motion_blur(L, params, samp_data, htm_data);
-
-        //resize_img(L, delta_data, offset_amt_data, blur_amt_data, center, img_size, max_size);
+        render_object_motion_blur(L, can_render_2f, params, samp_data, htm_data);
 
         // Print information.params.is_printing_info_enabled
         if (params.print_info) {
