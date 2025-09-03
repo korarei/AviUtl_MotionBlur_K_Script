@@ -89,9 +89,9 @@ GLShaderKit::setPlaneVertex(int n) const {
 }
 
 void
-GLShaderKit::setShader(const std::string &shader_path, bool force_reload) const {
+GLShaderKit::setShader(const char *shader_path, bool force_reload) const {
     lua_getfield(L, -1, "setShader");
-    lua_pushstring(L, shader_path.c_str());
+    lua_pushstring(L, shader_path);
     lua_pushboolean(L, force_reload);
     lua_call(L, 2, 0);
 }
@@ -107,27 +107,27 @@ GLShaderKit::setTexture2D(int unit, const Image &img) const {
 }
 
 void
-GLShaderKit::setFloat(std::string name, const std::vector<float> &vec) const {
+GLShaderKit::setFloat(const char *name, const std::vector<float> &vec) const {
     lua_getfield(L, -1, "setFloat");
-    lua_pushstring(L, name.c_str());
+    lua_pushstring(L, name);
     for (float value : vec) lua_pushnumber(L, value);
 
     lua_call(L, vec.size() + 1, 0);
 }
 
 void
-GLShaderKit::setInt(std::string name, const std::vector<int> &vec) const {
+GLShaderKit::setInt(const char *name, const std::vector<int> &vec) const {
     lua_getfield(L, -1, "setInt");
-    lua_pushstring(L, name.c_str());
+    lua_pushstring(L, name);
     for (int value : vec) lua_pushinteger(L, value);
 
     lua_call(L, vec.size() + 1, 0);
 }
 
 void
-GLShaderKit::setMatrix(std::string name, std::string type, bool transpose, float angle_rad) const {
+GLShaderKit::setMatrix(const char *name, std::string type, bool transpose, float angle_rad) const {
     lua_getfield(L, -1, "setMatrix");
-    lua_pushstring(L, name.c_str());
+    lua_pushstring(L, name);
     lua_pushstring(L, type.c_str());
     lua_pushboolean(L, transpose);
 
@@ -149,9 +149,40 @@ GLShaderKit::setMatrix(std::string name, std::string type, bool transpose, float
 }
 
 void
-GLShaderKit::draw(std::string mode, Image &img) const {
+GLShaderKit::setMat3(const char *name, bool transpose, const Mat3<float> &mat3) const {
+    lua_getfield(L, -1, "setMatrix");
+    lua_pushstring(L, name);
+    lua_pushstring(L, "3x3");
+    lua_pushboolean(L, transpose);
+
+    lua_newtable(L);
+
+    lua_pushnumber(L, mat3(0, 0));
+    lua_rawseti(L, -2, 1);
+    lua_pushnumber(L, mat3(0, 1));
+    lua_rawseti(L, -2, 2);
+    lua_pushnumber(L, mat3(0, 2));
+    lua_rawseti(L, -2, 3);
+    lua_pushnumber(L, mat3(1, 0));
+    lua_rawseti(L, -2, 4);
+    lua_pushnumber(L, mat3(1, 1));
+    lua_rawseti(L, -2, 5);
+    lua_pushnumber(L, mat3(1, 2));
+    lua_rawseti(L, -2, 6);
+    lua_pushnumber(L, mat3(2, 0));
+    lua_rawseti(L, -2, 7);
+    lua_pushnumber(L, mat3(2, 1));
+    lua_rawseti(L, -2, 8);
+    lua_pushnumber(L, mat3(2, 2));
+    lua_rawseti(L, -2, 9);
+
+    lua_call(L, 4, 0);
+}
+
+void
+GLShaderKit::draw(const char *mode, Image &img) const {
     lua_getfield(L, -1, "draw");
-    lua_pushstring(L, mode.c_str());
+    lua_pushstring(L, mode);
     lua_pushlightuserdata(L, img.data);
     lua_pushinteger(L, img.size.get_x());
     lua_pushinteger(L, img.size.get_y());
@@ -159,18 +190,7 @@ GLShaderKit::draw(std::string mode, Image &img) const {
 }
 
 void
-GLShaderKit::setParamsForOMBStep(const std::string &name, const Steps &steps) const {
-    std::string pos_param = "step_pos_" + name;
-    std::string scale_param = "step_scale_" + name;
-    std::string rot_param = "step_rot_mat_" + name;
-
-    setFloat(pos_param.c_str(), {steps.location.get_x(), steps.location.get_y()});
-    setFloat(scale_param.c_str(), {steps.scale});
-    setMatrix(rot_param.c_str(), "2x2", false, steps.rz_rad);
-}
-
-void
-expand_image(const std::array<int, 4> &expansion, lua_State *L) {
+lua_func::expand_image(const std::array<int, 4> &expansion, lua_State *L) {
     lua_getglobal(L, "obj");
     lua_getfield(L, -1, "effect");
     lua_pushstring(L, "領域拡張");

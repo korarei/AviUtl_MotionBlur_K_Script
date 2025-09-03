@@ -14,8 +14,14 @@
 #endif
 
 inline bool
+is_zero(float val) {
+    constexpr float epsilon = 1.0e-4f;
+    return std::fabsf(val) <= epsilon;
+}
+
+inline bool
 are_equal(float a, float b) {
-    constexpr float epsilon = 1e-4f;
+    constexpr float epsilon = 1.0e-4f;
     return std::fabsf(a - b) <= epsilon;
 }
 
